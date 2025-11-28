@@ -7,7 +7,7 @@ body {
     color: #e9ecef;
     font-family: 'Courier New', Courier, monospace;
     font-size: 0.9rem;
-    height: 70vh;
+    height: 40vh; /* Adjusted height */
     overflow-y: auto;
     border: 1px solid #495057;
 }
@@ -16,19 +16,6 @@ body {
     padding: 4px 8px;
     border-bottom: 1px solid #343a40;
     word-break: break-all;
-}
-
-.log-entry.log-info .log-type {
-    color: #0d6efd; /* Bootstrap primary blue */
-}
-
-.log-entry.log-error .log-type {
-    color: #dc3545; /* Bootstrap danger red */
-}
-
-.log-entry .log-timestamp {
-    color: #6c757d; /* Bootstrap secondary text color */
-    margin-right: 10px;
 }
 
 /* Custom scrollbar for a more modern look */
@@ -52,4 +39,18 @@ body {
 
 #status-badge.bg-danger {
     background-color: #dc3545 !important;
+}
+
+#qr-image {
+    max-width: 280px;
+    border: 6px solid #fff;
+    padding: 10px;
+    background-color: #fff;
+}
+
+#whatsapp-container {
+    min-height: 300px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
 }

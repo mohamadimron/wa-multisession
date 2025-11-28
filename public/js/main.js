@@ -1,118 +1,164 @@
 document.addEventListener('DOMContentLoaded', () => {
-    const socket = io({
-        reconnectionAttempts: 5,
-        reconnectionDelay: 1000,
+    console.log('Dashboard script loaded.');
+    
+    // --- Element Selectors ---
+    const logContainer = document.getElementById('log-container');
+    const whatsappStatusBadge = document.getElementById('whatsapp-status-badge');
+    const qrContainer = document.getElementById('qr-container');
+    const qrImage = document.getElementById('qr-image');
+    const whatsappReadyContainer = document.getElementById('whatsapp-ready');
+    const sendMessageForm = document.getElementById('send-message-form');
+    const sendButton = document.getElementById('send-button');
+    const sendButtonSpinner = sendButton.querySelector('.spinner-border');
+    const sendResult = document.getElementById('send-result');
+    const btnStart = document.getElementById('btn-start-whatsapp');
+    const btnStop = document.getElementById('btn-stop-whatsapp');
+
+    // --- Socket.IO for Logs ---
+    const logSocket = io();
+    const systemStatusBadge = document.getElementById('status-badge');
+
+    if (systemStatusBadge) {
+        logSocket.on('connect', () => {
+            systemStatusBadge.textContent = 'Connected';
+            systemStatusBadge.classList.remove('bg-danger');
+            systemStatusBadge.classList.add('bg-success');
+        });
+        logSocket.on('disconnect', () => {
+            systemStatusBadge.textContent = 'Disconnected';
+            systemStatusBadge.classList.remove('bg-success');
+            systemStatusBadge.classList.add('bg-danger');
+        });
+    }
+
+    if (logContainer) {
+        logSocket.on('new_log', (log) => {
+            const logEntry = document.createElement('div');
+            logEntry.className = `log-entry text-${log.type === 'error' ? 'danger' : 'light'}`;
+            logEntry.innerHTML = `<small>${new Date(log.timestamp).toLocaleTimeString()}</small> [${log.type.toUpperCase()}] ${log.message}`;
+            logContainer.appendChild(logEntry);
+            logContainer.scrollTop = logContainer.scrollHeight;
+        });
+    }
+
+    // --- Control Button Logic ---
+    btnStart.addEventListener('click', () => {
+        console.log('Start button clicked');
+        updateWhatsappStatus('STARTING...', 'info');
+        fetch('/api/whatsapp/start', { method: 'POST' });
     });
 
-    const statusBadge = document.getElementById('status-badge');
-    const logContainer = document.getElementById('log-container');
-    const settingsForm = document.getElementById('settings-form');
-    const alertPlaceholder = document.getElementById('alert-placeholder');
+    btnStop.addEventListener('click', () => {
+        console.log('Stop button clicked');
+        updateWhatsappStatus('STOPPING...', 'warning');
+        fetch('/api/whatsapp/stop', { method: 'POST' });
+    });
 
-    // --- Socket.IO Connection Status ---
-    if (statusBadge) {
-        socket.on('connect', () => {
-            statusBadge.textContent = 'Connected';
-            statusBadge.classList.remove('bg-danger');
-            statusBadge.classList.add('bg-success');
-        });
-
-        socket.on('disconnect', () => {
-            statusBadge.textContent = 'Disconnected';
-            statusBadge.classList.remove('bg-success');
-            statusBadge.classList.add('bg-danger');
-        });
-
-        socket.on('connect_error', () => {
-            statusBadge.textContent = 'Connection Error';
-            statusBadge.classList.remove('bg-success');
-            statusBadge.classList.add('bg-danger');
-        });
+    // --- Server-Sent Events (SSE) for WhatsApp Status & QR ---
+    function updateWhatsappStatus(text, color) {
+        whatsappStatusBadge.textContent = text;
+        whatsappStatusBadge.className = `badge bg-${color} me-2`;
     }
 
-    // --- Dashboard Page Logic ---
-    if (logContainer) {
-        // Fetch initial logs
-        fetch('/api/logs?limit=100')
-            .then(res => res.json())
-            .then(logs => {
-                logs.forEach(log => addLogEntry(log));
-            })
-            .catch(err => console.error('Failed to fetch initial logs:', err));
+    function manageUIState(state) {
+        // Default state
+        btnStart.classList.add('d-none');
+        btnStop.classList.add('d-none');
+        qrContainer.classList.add('d-none');
+        whatsappReadyContainer.classList.add('d-none');
 
-        // Listen for new logs
-        socket.on('new_log', (log) => {
-            addLogEntry(log);
-        });
+        if (state === 'ready') {
+            updateWhatsappStatus('READY', 'success');
+            btnStop.classList.remove('d-none');
+            whatsappReadyContainer.classList.remove('d-none');
+        } else if (state === 'disconnected') {
+            updateWhatsappStatus('STOPPED', 'danger');
+            btnStart.classList.remove('d-none');
+        } else if (state === 'qr') {
+            updateWhatsappStatus('QR SCAN', 'warning');
+            btnStop.classList.remove('d-none'); // Show stop button during QR scan
+            qrContainer.classList.remove('d-none');
+        } else { // Connecting, authenticating, etc.
+            btnStop.classList.remove('d-none');
+        }
     }
 
-    function addLogEntry(log) {
-        const entry = document.createElement('div');
-        entry.className = `log-entry log-${log.type}`;
-        
-        const timestamp = new Date(log.timestamp).toLocaleTimeString();
+    console.log('Connecting to /qr-stream for WhatsApp status...');
+    const sse = new EventSource('/qr-stream');
 
-        entry.innerHTML = `
-            <span class="log-timestamp">${timestamp}</span>
-            <span class="log-type">[${log.type.toUpperCase()}]</span>
-            <span class="log-message">${log.message}</span>
-        `;
-        
-        logContainer.appendChild(entry);
-        logContainer.scrollTop = logContainer.scrollHeight; // Auto-scroll to bottom
-    }
+    sse.addEventListener('status', (e) => {
+        const payload = JSON.parse(e.data);
+        console.log('SSE event: status -', payload.message);
+        updateWhatsappStatus(payload.message, 'info');
+    });
 
+    sse.addEventListener('qr', (e) => {
+        console.log('SSE event: qr');
+        const payload = JSON.parse(e.data);
+        qrImage.src = payload.dataUrl;
+        manageUIState('qr');
+    });
 
-    // --- Settings Page Logic ---
-    if (settingsForm) {
-        // Fetch current settings and populate the form
-        fetch('/api/settings')
-            .then(res => res.json())
-            .then(settings => {
-                document.getElementById('apiKey').value = settings.apiKey || '';
-                document.getElementById('refreshInterval').value = settings.refreshInterval || '';
-            })
-            .catch(err => console.error('Failed to fetch settings:', err));
+    sse.addEventListener('ready', (e) => {
+        console.log('SSE event: ready');
+        manageUIState('ready');
+    });
 
-        // Handle form submission
-        settingsForm.addEventListener('submit', (e) => {
-            e.preventDefault();
-            const apiKey = document.getElementById('apiKey').value;
-            const refreshInterval = document.getElementById('refreshInterval').value;
+    sse.addEventListener('disconnected', (e) => {
+        console.log('SSE event: disconnected');
+        manageUIState('disconnected');
+    });
 
-            fetch('/api/settings', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ apiKey, refreshInterval }),
-            })
-            .then(res => res.json())
-            .then(data => {
+    sse.onerror = (err) => {
+        console.error('SSE Connection Error:', err);
+        updateWhatsappStatus('STREAM ERROR', 'danger');
+        manageUIState('disconnected');
+        sse.close();
+    };
+
+    // --- Send Message Form ---
+    if (sendMessageForm) {
+        sendMessageForm.addEventListener('submit', async (e) => {
+            e.preventDefault(); // Prevent form refresh
+
+            const phoneNumber = document.getElementById('phone-number').value;
+            const message = document.getElementById('message').value;
+
+            if (!phoneNumber || !message) {
+                alert('Please fill in both phone number and message fields.');
+                return;
+            }
+
+            // Show loading state
+            sendButtonSpinner.classList.remove('d-none');
+            sendButton.disabled = true;
+            sendResult.innerHTML = '';
+
+            try {
+                const response = await fetch('/api/whatsapp/send', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({ number: phoneNumber, message: message })
+                });
+
+                const data = await response.json();
+
                 if (data.status === 'success') {
-                    showAlert('Settings saved successfully!', 'success');
+                    sendResult.innerHTML = `<div class="alert alert-success">${data.message}</div>`;
+                    document.getElementById('message').value = ''; // Clear message field
                 } else {
-                    showAlert('Error saving settings.', 'danger');
+                    sendResult.innerHTML = `<div class="alert alert-danger">Error: ${data.message}</div>`;
                 }
-            })
-            .catch(err => {
-                console.error('Error saving settings:', err);
-                showAlert('Error saving settings.', 'danger');
-            });
+            } catch (error) {
+                console.error('Send message error:', error);
+                sendResult.innerHTML = `<div class="alert alert-danger">Error: ${error.message || 'Failed to send message'}</div>`;
+            } finally {
+                // Reset loading state
+                sendButtonSpinner.classList.add('d-none');
+                sendButton.disabled = false;
+            }
         });
-    }
-
-    function showAlert(message, type) {
-        if (!alertPlaceholder) return;
-        const wrapper = document.createElement('div');
-        wrapper.innerHTML = [
-            `<div class="alert alert-${type} alert-dismissible" role="alert">`,
-            `   <div>${message}</div>`,
-            '   <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>',
-            '</div>'
-        ].join('');
-        alertPlaceholder.append(wrapper);
-
-        setTimeout(() => {
-            wrapper.remove();
-        }, 4000);
     }
 });
