@@ -28,6 +28,7 @@ document.addEventListener('DOMContentLoaded', () => {
         const item = document.createElement('div');
         item.className = `session-status-item ${status.toLowerCase()}`;
         item.id = `session-status-${sessionId}`;
+        item.dataset.sessionId = sessionId; // Add data attribute to identify session
 
         // Get status text and color based on status
         let statusText = status.toUpperCase();
@@ -79,6 +80,12 @@ document.addEventListener('DOMContentLoaded', () => {
             </div>
         `;
 
+        // Add click event to select the session in the dropdown
+        item.addEventListener('click', () => {
+            sessionSelect.value = sessionId;
+            sessionSelect.dispatchEvent(new Event('change')); // Trigger the change event to update UI
+        });
+
         return item;
     }
 
@@ -89,6 +96,7 @@ document.addEventListener('DOMContentLoaded', () => {
         if (existingItem) {
             // Update existing item
             existingItem.className = `session-status-item ${status.toLowerCase()}`;
+            existingItem.dataset.sessionId = sessionId; // Ensure dataset is updated
 
             // Update status text and color
             let statusText = status.toUpperCase();
@@ -132,6 +140,9 @@ document.addEventListener('DOMContentLoaded', () => {
             existingItem.querySelector('.session-status').className = `session-status ${statusColor}`;
             existingItem.querySelector('.session-status i').className = `bi ${statusIcon}`;
             existingItem.querySelector('.session-status span').textContent = statusText;
+
+            // Update the session name text
+            existingItem.querySelector('.session-name span').textContent = sessionId;
         } else {
             // Create new item
             const newItem = createSessionStatusItem(sessionId, status);

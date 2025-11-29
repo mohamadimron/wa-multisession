@@ -170,12 +170,14 @@ body {
     border-left: 4px solid #495057;
     transition: all 0.2s ease;
     border: 1px solid rgba(255,255,255,0.1);
+    cursor: pointer; /* Indicate that the item is clickable */
 }
 
 .session-status-item:hover {
     background-color: rgba(255, 255, 255, 0.1);
     transform: translateY(-1px);
     box-shadow: 0 4px 8px rgba(0,0,0,0.15);
+    cursor: pointer; /* Maintain pointer cursor on hover */
 }
 
 .session-status-item.active {
