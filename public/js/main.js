@@ -104,7 +104,8 @@ document.addEventListener('DOMContentLoaded', () => {
                     // For QR sessions, show the QR code
                     qrContainer.classList.remove('d-none');
                 } else if (status === 'disconnected' || status === 'stopped') {
-                    // For disconnected/stopped sessions, show stopped panel
+                    // For disconnected/stopped sessions, show stopped panel and update session name
+                    document.getElementById('stopped-session-name').textContent = sessionId;
                     whatsappStoppedContainer.classList.remove('d-none');
                 } else {
                     // For other states (connecting, authenticating, etc.), update status accordingly
@@ -447,7 +448,8 @@ document.addEventListener('DOMContentLoaded', () => {
                 // Don't show the basic "WhatsApp is Connected" panel, let user click to see chat history
                 // Keep it hidden and they can click the "Load Chat History" button or session item
             } else if (status === 'disconnected' || status === 'stopped') {
-                // Show stopped panel for disconnected sessions
+                // Show stopped panel for disconnected sessions and update session name
+                document.getElementById('stopped-session-name').textContent = selectedSession;
                 whatsappStoppedContainer.classList.remove('d-none');
             } else {
                 // For other states like connecting, authenticating, etc.
@@ -757,7 +759,8 @@ document.addEventListener('DOMContentLoaded', () => {
                 whatsappReadyContainer.classList.add('d-none');
                 whatsappStoppedContainer.classList.add('d-none');
 
-                // Show stopped panel
+                // Show stopped panel and update session name
+                document.getElementById('stopped-session-name').textContent = sessionId;
                 whatsappStoppedContainer.classList.remove('d-none');
             }
         }
@@ -926,6 +929,11 @@ document.addEventListener('DOMContentLoaded', () => {
 
             console.log(`Start session button clicked for session: ${sessionId}`);
             updateWhatsappStatus('STARTING...', 'info');
+
+            // Update button states to show that start is in progress
+            btnStart.classList.add('d-none');
+            btnStop.classList.remove('d-none');
+
             fetch('/api/whatsapp/start', {
                 method: 'POST',
                 headers: {
