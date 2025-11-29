@@ -393,3 +393,62 @@ body {
         background: #555;
         border-radius: 6px;
     }
+
+    /* Chat history container */
+    .chat-history-container {
+        border: 1px solid rgba(255,255,255,0.1);
+        border-radius: 8px;
+        padding: 10px;
+        background-color: rgba(0,0,0,0.05);
+    }
+
+    .chat-history-content {
+        max-height: 250px;
+        overflow-y: auto;
+    }
+
+    /* Chat message styling */
+    .chat-message {
+        padding: 8px 12px;
+        margin: 5px 0;
+        border-radius: 12px;
+        max-width: 80%;
+        word-wrap: break-word;
+        position: relative;
+    }
+
+    .chat-message.sent {
+        background-color: #0d6efd;
+        color: white;
+        margin-left: auto;
+        text-align: right;
+    }
+
+    .chat-message.received {
+        background-color: #2d3748;
+        color: white;
+        margin-right: auto;
+    }
+
+    .message-info {
+        font-size: 0.75rem;
+        opacity: 0.7;
+        margin-top: 3px;
+    }
+
+    .message-info.sent {
+        text-align: right;
+    }
+
+    .message-info.received {
+        text-align: left;
+    }
+
+    /* Custom scrollbar for chat history */
+    .chat-history-container::-webkit-scrollbar {
+        width: 6px;
+    }
+    .chat-history-container::-webkit-scrollbar-thumb {
+        background: #555;
+        border-radius: 6px;
+    }

@@ -88,7 +88,7 @@
                             </div>
                         </div>
 
-                        <!-- RIGHT: QR or READY panel -->
+                        <!-- RIGHT: QR, READY, or CHAT HISTORY panel -->
                         <div class="current-session-details">
 
                             <!-- QR Panel -->
@@ -112,6 +112,66 @@
                                 <p class="text-muted">
                                     This session is ready to send and receive messages.
                                 </p>
+
+                                <!-- Button to load chat history -->
+                                <button id="load-chat-history" class="btn btn-outline-primary mt-3">
+                                    <i class="bi bi-chat-text"></i> Load Chat History
+                                </button>
+                            </div>
+
+                            <!-- Stopped Panel -->
+                            <div id="whatsapp-stopped" class="d-none text-center p-4">
+                                <div class="mb-3">
+                                    <i class="bi bi-whatsapp rounded-circle bg-danger bg-opacity-25 p-3"
+                                        style="font-size: 4rem; color: #dc3545;"></i>
+                                </div>
+
+                                <h5 class="text-danger mb-2">WhatsApp is Not Running</h5>
+                                <p class="text-muted">
+                                    This session is not active. Start the session to connect.
+                                </p>
+
+                                <!-- Button to start session -->
+                                <button id="start-session-btn" class="btn btn-success mt-3">
+                                    <i class="bi bi-play"></i> Start Session
+                                </button>
+                            </div>
+
+                            <!-- Chat History Panel -->
+                            <div id="chat-history-container" class="d-none" style="display: flex; flex-direction: column; height: 100%;">
+                                <div class="d-flex justify-content-between align-items-center mb-3">
+                                    <h5><i class="bi bi-chat-dots"></i> Chat History</h5>
+                                    <button id="back-to-ready" class="btn btn-sm btn-outline-secondary">
+                                        <i class="bi bi-arrow-left"></i> Back
+                                    </button>
+                                </div>
+
+                                <!-- Chat History List -->
+                                <div id="chat-history-list" class="chat-history-container" style="flex: 1; overflow-y: auto; max-height: 300px; min-height: 200px;">
+                                    <!-- Chat messages will be loaded here -->
+                                    <div id="chat-history-loading" class="text-center py-3 text-muted d-none">
+                                        <div class="spinner-border" role="status">
+                                            <span class="visually-hidden">Loading...</span>
+                                        </div>
+                                        <p>Loading chat history...</p>
+                                    </div>
+                                    <div id="chat-history-content" class="chat-history-content">
+                                        <!-- Messages will appear here -->
+                                    </div>
+                                </div>
+
+                                <!-- Chat History Controls -->
+                                <div class="mt-3">
+                                    <div class="d-flex gap-2">
+                                        <input type="text" id="chat-search" class="form-control" placeholder="Search in chat history...">
+                                        <button id="refresh-chat-history" class="btn btn-outline-primary" title="Refresh">
+                                            <i class="bi bi-arrow-clockwise"></i>
+                                        </button>
+                                    </div>
+                                    <div class="form-text mt-1">
+                                        Showing recent messages. Scroll up to load more.
+                                    </div>
+                                </div>
                             </div>
                         </div>
 

@@ -148,6 +148,58 @@ class WhatsAppSession extends EventEmitter {
     getSessionId() {
         return this.sessionId;
     }
+
+    async getChatHistory(chatId = null, options = {}) {
+        if (!this.isClientReady || !this.client) {
+            throw new Error(`WhatsApp client for session ${this.sessionId} is not ready.`);
+        }
+
+        try {
+            if (chatId) {
+                // Get specific chat
+                const chat = await this.client.getChatById(chatId);
+                const messages = await chat.fetchMessages(options);
+
+                // Add chat info to each message
+                messages.forEach(msg => {
+                    msg.chatInfo = {
+                        id: chat.id._serialized,
+                        name: chat.name,
+                        isGroup: chat.isGroup,
+                        participantCount: chat.participantCount
+                    };
+                });
+
+                return messages;
+            } else {
+                // Get all chats and their recent messages following the example pattern
+                const chats = await this.client.getChats();
+                const allMessages = [];
+
+                // For each chat, fetch messages with the specified limit
+                for (const chat of chats) {
+                    const messages = await chat.fetchMessages(options);
+                    messages.forEach(msg => {
+                        msg.chatInfo = {
+                            id: chat.id._serialized,
+                            name: chat.name,
+                            isGroup: chat.isGroup,
+                            participantCount: chat.participantCount
+                        };
+                        allMessages.push(msg);
+                    });
+                }
+
+                // Sort all messages by timestamp (newest first)
+                allMessages.sort((a, b) => b.timestamp - a.timestamp);
+
+                return allMessages;
+            }
+        } catch (err) {
+            logger.error(`Failed to fetch chat history for session ${this.sessionId}: ${err.message}`, this.sessionId);
+            throw new Error(`Failed to fetch chat history: ${err.message}`);
+        }
+    }
 }
 
 class WhatsAppMultiSession extends EventEmitter {
@@ -232,6 +284,14 @@ class WhatsAppMultiSession extends EventEmitter {
             throw new Error(`Session ${sessionId} does not exist`);
         }
         return await session.sendMessage(number, message);
+    }
+
+    async getChatHistory(sessionId, chatId = null, options = {}) {
+        const session = this.getSession(sessionId);
+        if (!session) {
+            throw new Error(`Session ${sessionId} does not exist`);
+        }
+        return await session.getChatHistory(chatId, options);
     }
 
     isReady(sessionId) {

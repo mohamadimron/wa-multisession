@@ -212,6 +212,59 @@ async function main() {
         res.json({ status: 'success', message: `Session ${sessionId} deleted.`, sessionId });
     });
 
+    // API endpoint to get chat history
+    app.get('/api/whatsapp/chat-history/:sessionId', async (req, res) => {
+        const { sessionId } = req.params;
+        const { chatId, limit = 50 } = req.query;
+
+        if (!sessionId) {
+            return res.status(400).json({
+                status: 'error',
+                message: 'Session ID is required.'
+            });
+        }
+
+        try {
+            // Check if session is ready before attempting to fetch history
+            if (!whatsappClient.isReady(sessionId)) {
+                return res.status(400).json({
+                    status: 'error',
+                    message: 'WhatsApp client for this session is not ready.'
+                });
+            }
+
+            const options = { limit: parseInt(limit) };
+            const messages = await whatsappClient.getChatHistory(sessionId, chatId, options);
+
+            // Format messages for the frontend
+            const formattedMessages = messages.map(msg => ({
+                id: msg.id._serialized,
+                body: msg.body,
+                timestamp: msg.timestamp,
+                from: msg.from,
+                to: msg.to,
+                fromMe: msg.fromMe,
+                author: msg.author,
+                type: msg.type,
+                hasMedia: msg.hasMedia,
+                isForwarded: msg.isForwarded,
+                chatInfo: msg.chatInfo
+            }));
+
+            res.json({
+                status: 'success',
+                messages: formattedMessages,
+                count: formattedMessages.length
+            });
+        } catch (error) {
+            logger.error(`API chat history error for session ${sessionId}: ${error.message}`);
+            res.status(500).json({
+                status: 'error',
+                message: error.message
+            });
+        }
+    });
+
     // --- Standard API Routes ---
     app.post('/api/whatsapp/send', async (req, res) => {
         const { sessionId, number, message } = req.body;
