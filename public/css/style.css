@@ -149,10 +149,10 @@ body {
 
 /* Multisession Status List Styles */
 .session-statuses-list {
-    max-height: 250px;
+    max-height: 320px;
     overflow-y: auto;
     padding-right: 5px;
-    margin-bottom: 15px;
+    margin-bottom: 10px;
     border: 1px solid rgba(255,255,255,0.1);
     border-radius: 8px;
     padding: 10px;
@@ -350,3 +350,44 @@ body {
 .form-select option {
     color: #000;
 }
+
+ #whatsapp-container {
+        display: flex;
+        gap: 20px;
+        height: 100%;
+    }
+
+    /* Kiri = Session Status */
+    #multisession-status-container {
+        width: 35%;
+        min-width: 220px;
+        max-height: 380px;
+        overflow-y: auto;
+    }
+
+    /* Kanan = QR / Ready Panel */
+    .current-session-details {
+        flex: 1;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+    }
+
+    .session-statuses-list > div {
+        margin-bottom: 10px;
+    }
+
+    /* Card header spacing rapi */
+    .card-header {
+        padding-top: 14px !important;
+        padding-bottom: 14px !important;
+    }
+
+    /* Smooth scrollbar */
+    #multisession-status-container::-webkit-scrollbar {
+        width: 6px;
+    }
+    #multisession-status-container::-webkit-scrollbar-thumb {
+        background: #555;
+        border-radius: 6px;
+    }
