@@ -17,10 +17,160 @@ document.addEventListener('DOMContentLoaded', () => {
     const btnStart = document.getElementById('btn-start-whatsapp');
     const btnStop = document.getElementById('btn-stop-whatsapp');
     const systemStatusBadge = document.getElementById('status-badge');
+    const sessionStatusesContainer = document.getElementById('session-statuses');
 
     // Track all sessions and their states
     // Start with no default session to avoid showing it if no folder exists
     const sessionStates = {};
+
+    // Function to create a session status item element
+    function createSessionStatusItem(sessionId, status) {
+        const item = document.createElement('div');
+        item.className = `session-status-item ${status.toLowerCase()}`;
+        item.id = `session-status-${sessionId}`;
+
+        // Get status text and color based on status
+        let statusText = status.toUpperCase();
+        let statusColor = 'badge-secondary';
+        let statusIcon = 'bi bi-question-circle';
+
+        switch(status.toLowerCase()) {
+            case 'ready':
+                statusColor = 'badge-success';
+                statusIcon = 'bi bi-check-circle';
+                statusText = 'READY';
+                break;
+            case 'qr':
+                statusColor = 'badge-warning text-dark';
+                statusIcon = 'bi bi-qr-code';
+                statusText = 'QR SCAN';
+                break;
+            case 'connecting':
+            case 'authenticating':
+            case 'starting...':
+                statusColor = 'badge-info';
+                statusIcon = 'bi bi-arrow-repeat';
+                statusText = 'CONNECTING';
+                break;
+            case 'disconnected':
+            case 'stopped':
+                statusColor = 'badge-danger';
+                statusIcon = 'bi bi-x-circle';
+                statusText = 'STOPPED';
+                break;
+            case 'auth_failure':
+                statusColor = 'badge-warning text-dark';
+                statusIcon = 'bi bi-exclamation-triangle';
+                statusText = 'AUTH FAIL';
+                break;
+            default:
+                statusColor = 'badge-secondary';
+                statusIcon = 'bi bi-dash-circle';
+        }
+
+        item.innerHTML = `
+            <div class="session-name">
+                <i class="bi bi-whatsapp"></i>
+                <span>${sessionId}</span>
+            </div>
+            <div class="session-status ${statusColor}">
+                <i class="bi ${statusIcon}"></i>
+                <span>${statusText}</span>
+            </div>
+        `;
+
+        return item;
+    }
+
+    // Function to update session status in the UI
+    function updateSessionStatusUI(sessionId, status) {
+        const existingItem = document.getElementById(`session-status-${sessionId}`);
+
+        if (existingItem) {
+            // Update existing item
+            existingItem.className = `session-status-item ${status.toLowerCase()}`;
+
+            // Update status text and color
+            let statusText = status.toUpperCase();
+            let statusColor = 'badge-secondary';
+            let statusIcon = 'bi bi-question-circle';
+
+            switch(status.toLowerCase()) {
+                case 'ready':
+                    statusColor = 'badge-success';
+                    statusIcon = 'bi bi-check-circle';
+                    statusText = 'READY';
+                    break;
+                case 'qr':
+                    statusColor = 'badge-warning text-dark';
+                    statusIcon = 'bi bi-qr-code';
+                    statusText = 'QR SCAN';
+                    break;
+                case 'connecting':
+                case 'authenticating':
+                case 'starting...':
+                    statusColor = 'badge-info';
+                    statusIcon = 'bi bi-arrow-repeat';
+                    statusText = 'CONNECTING';
+                    break;
+                case 'disconnected':
+                case 'stopped':
+                    statusColor = 'badge-danger';
+                    statusIcon = 'bi bi-x-circle';
+                    statusText = 'STOPPED';
+                    break;
+                case 'auth_failure':
+                    statusColor = 'badge-warning text-dark';
+                    statusIcon = 'bi bi-exclamation-triangle';
+                    statusText = 'AUTH FAIL';
+                    break;
+                default:
+                    statusColor = 'badge-secondary';
+                    statusIcon = 'bi bi-dash-circle';
+            }
+
+            existingItem.querySelector('.session-status').className = `session-status ${statusColor}`;
+            existingItem.querySelector('.session-status i').className = `bi ${statusIcon}`;
+            existingItem.querySelector('.session-status span').textContent = statusText;
+        } else {
+            // Create new item
+            const newItem = createSessionStatusItem(sessionId, status);
+            sessionStatusesContainer.appendChild(newItem);
+        }
+
+        // If this is the selected session, also update the main status badge
+        if (sessionSelect.value === sessionId) {
+            updateWhatsappStatus(status, getStatusColor(status));
+        }
+    }
+
+    // Helper function to get appropriate color for status badge
+    function getStatusColor(status) {
+        switch(status.toLowerCase()) {
+            case 'ready':
+                return 'success';
+            case 'qr':
+            case 'authenticating':
+                return 'warning';
+            case 'connecting':
+            case 'starting...':
+                return 'info';
+            case 'disconnected':
+            case 'stopped':
+            case 'auth_failure':
+                return 'danger';
+            default:
+                return 'secondary';
+        }
+    }
+
+    // Function to remove a session from the UI
+    function removeSessionFromUI(sessionId) {
+        const item = document.getElementById(`session-status-${sessionId}`);
+        if (item) {
+            item.remove();
+        }
+    }
 
     // --- Socket.IO for Logs ---
     const logSocket = io();
@@ -98,12 +248,12 @@ document.addEventListener('DOMContentLoaded', () => {
                     break;
                 }
             }
-            
+
             if (sessionExists) {
                 alert(`Session "${newSessionId}" already exists!`);
                 return;
             }
-            
+
             // Create new session via API
             fetch('/api/whatsapp/create-session', {
                 method: 'POST',
@@ -120,13 +270,16 @@ document.addEventListener('DOMContentLoaded', () => {
                     option.value = newSessionId.trim();
                     option.textContent = newSessionId.trim();
                     sessionSelect.appendChild(option);
-                    
+
                     // Initialize state for this new session
                     sessionStates[newSessionId.trim()] = { status: 'disconnected', qr: null };
-                    
+
+                    // Update multisession status UI
+                    updateSessionStatusUI(newSessionId.trim(), 'disconnected');
+
                     // Select the new session
                     sessionSelect.value = newSessionId.trim();
-                    
+
                     // Update UI based on the new session selection
                     manageUIState(sessionStates[newSessionId.trim()].status);
                     updateWhatsappStatus(`Session ${newSessionId.trim()} created`, 'info');
@@ -184,11 +337,14 @@ document.addEventListener('DOMContentLoaded', () => {
                     // Remove from state
                     delete sessionStates[sessionToDelete];
 
+                    // Remove from status UI
+                    removeSessionFromUI(sessionToDelete);
+
                     // Switch back to default
-                    sessionSelect.value = 'default';
+                    sessionSelect.value = '';
 
                     // Update UI
-                    manageUIState(sessionStates['default'].status);
+                    manageUIState('disconnected');
                     updateWhatsappStatus(`Session ${sessionToDelete} deleted`, 'info');
 
                     // Reset the variable
@@ -216,8 +372,13 @@ document.addEventListener('DOMContentLoaded', () => {
 
     // Handle session selection change
     sessionSelect.addEventListener('change', () => {
+        // Remove 'active' class from all session items
+        document.querySelectorAll('.session-status-item').forEach(item => {
+            item.classList.remove('active');
+        });
+
         const selectedSession = sessionSelect.value;
-        if (sessionStates[selectedSession]) {
+        if (selectedSession && sessionStates[selectedSession]) {
             manageUIState(sessionStates[selectedSession].status);
 
             // If there's a stored QR code for this session, display it
@@ -227,6 +388,16 @@ document.addEventListener('DOMContentLoaded', () => {
             } else {
                 qrContainer.classList.add('d-none');
             }
+
+            // Add 'active' class to the selected session in the status list
+            const sessionItem = document.getElementById(`session-status-${selectedSession}`);
+            if (sessionItem) {
+                sessionItem.classList.add('active');
+            }
+        } else {
+            // If no session is selected, just update UI to default state
+            manageUIState('disconnected');
+            qrContainer.classList.add('d-none');
         }
     });
 
@@ -243,6 +414,9 @@ document.addEventListener('DOMContentLoaded', () => {
                         option.remove();
                     }
                 });
+
+                // Clear existing session status items
+                sessionStatusesContainer.innerHTML = '';
 
                 // Add all sessions from the server
                 const sessions = result.sessions;
@@ -271,6 +445,10 @@ document.addEventListener('DOMContentLoaded', () => {
                                 qr: null
                             };
                         }
+
+                        // Add to multisession status UI
+                        const status = session.isReady ? 'ready' : 'disconnected';
+                        updateSessionStatusUI(session.sessionId, status);
                     }
                 });
             }
@@ -282,7 +460,7 @@ document.addEventListener('DOMContentLoaded', () => {
     // --- Server-Sent Events (SSE) for WhatsApp Status & QR ---
     function updateWhatsappStatus(text, color) {
         const currentSession = sessionSelect.value;
-        whatsappStatusBadge.textContent = `${currentSession}: ${text}`;
+        whatsappStatusBadge.textContent = currentSession ? `${currentSession}: ${text}` : text;
         whatsappStatusBadge.className = `badge bg-${color} me-2`;
     }
 
@@ -318,13 +496,13 @@ document.addEventListener('DOMContentLoaded', () => {
 
     sse.addEventListener('status', (e) => {
         const payload = JSON.parse(e.data);
-        const { sessionId, message } = payload;
-        console.log('SSE event: status -', message, 'for session', sessionId);
-        
+        const { sessionId, message, details } = payload;
+        console.log('SSE event: status -', message, 'for session', sessionId, details ? 'details: ' + details : '');
+
         // Update the state for this session
         if (!sessionStates[sessionId]) {
             sessionStates[sessionId] = { status: 'disconnected', qr: null };
-            
+
             // Add to dropdown if not already there
             let sessionExists = false;
             for (let i = 0; i < sessionSelect.options.length; i++) {
@@ -333,7 +511,7 @@ document.addEventListener('DOMContentLoaded', () => {
                     break;
                 }
             }
-            
+
             if (!sessionExists) {
                 const option = document.createElement('option');
                 option.value = sessionId;
@@ -341,11 +519,17 @@ document.addEventListener('DOMContentLoaded', () => {
                 sessionSelect.appendChild(option);
             }
         }
-        
-        sessionStates[sessionId].status = message.toLowerCase().includes('ready') ? 'ready' : 
-                                         message.toLowerCase().includes('stop') ? 'disconnected' : message;
-        
-        // If this is the currently selected session, update the UI
+
+        let status = message.toLowerCase().includes('ready') ? 'ready' :
+                     message.toLowerCase().includes('stop') ? 'disconnected' :
+                     message.toLowerCase().includes('auth_failure') ? 'auth_failure' : message;
+
+        sessionStates[sessionId].status = status;
+
+        // Update the multisession status UI
+        updateSessionStatusUI(sessionId, status);
+
+        // If this is the currently selected session, update the main UI
         if (sessionSelect.value === sessionId) {
             manageUIState(sessionStates[sessionId].status);
         }
@@ -355,11 +539,11 @@ document.addEventListener('DOMContentLoaded', () => {
         console.log('SSE event: qr');
         const payload = JSON.parse(e.data);
         const { sessionId, dataUrl } = payload;
-        
+
         // Store the QR code for this session
         if (!sessionStates[sessionId]) {
             sessionStates[sessionId] = { status: 'qr', qr: null };
-            
+
             // Add to dropdown if not already there
             let sessionExists = false;
             for (let i = 0; i < sessionSelect.options.length; i++) {
@@ -368,7 +552,7 @@ document.addEventListener('DOMContentLoaded', () => {
                     break;
                 }
             }
-            
+
             if (!sessionExists) {
                 const option = document.createElement('option');
                 option.value = sessionId;
@@ -376,10 +560,13 @@ document.addEventListener('DOMContentLoaded', () => {
                 sessionSelect.appendChild(option);
             }
         }
-        
+
         sessionStates[sessionId].qr = dataUrl;
         sessionStates[sessionId].status = 'qr';
-        
+
+        // Update the multisession status UI
+        updateSessionStatusUI(sessionId, 'qr');
+
         // If this is the currently selected session, update the UI
         if (sessionSelect.value === sessionId) {
             qrImage.src = dataUrl;
@@ -392,11 +579,11 @@ document.addEventListener('DOMContentLoaded', () => {
         console.log('SSE event: ready');
         const payload = JSON.parse(e.data);
         const { sessionId, message } = payload;
-        
+
         // Update the state for this session
         if (!sessionStates[sessionId]) {
             sessionStates[sessionId] = { status: 'ready', qr: null };
-            
+
             // Add to dropdown if not already there
             let sessionExists = false;
             for (let i = 0; i < sessionSelect.options.length; i++) {
@@ -405,7 +592,7 @@ document.addEventListener('DOMContentLoaded', () => {
                     break;
                 }
             }
-            
+
             if (!sessionExists) {
                 const option = document.createElement('option');
                 option.value = sessionId;
@@ -413,9 +600,12 @@ document.addEventListener('DOMContentLoaded', () => {
                 sessionSelect.appendChild(option);
             }
         }
-        
+
         sessionStates[sessionId].status = 'ready';
-        
+
+        // Update the multisession status UI
+        updateSessionStatusUI(sessionId, 'ready');
+
         // If this is the currently selected session, update the UI
         if (sessionSelect.value === sessionId) {
             manageUIState('ready');
@@ -427,11 +617,11 @@ document.addEventListener('DOMContentLoaded', () => {
         console.log('SSE event: disconnected');
         const payload = JSON.parse(e.data);
         const { sessionId, message } = payload;
-        
+
         // Update the state for this session
         if (!sessionStates[sessionId]) {
             sessionStates[sessionId] = { status: 'disconnected', qr: null };
-            
+
             // Add to dropdown if not already there
             let sessionExists = false;
             for (let i = 0; i < sessionSelect.options.length; i++) {
@@ -440,7 +630,7 @@ document.addEventListener('DOMContentLoaded', () => {
                     break;
                 }
             }
-            
+
             if (!sessionExists) {
                 const option = document.createElement('option');
                 option.value = sessionId;
@@ -448,9 +638,12 @@ document.addEventListener('DOMContentLoaded', () => {
                 sessionSelect.appendChild(option);
             }
         }
-        
+
         sessionStates[sessionId].status = 'disconnected';
-        
+
+        // Update the multisession status UI
+        updateSessionStatusUI(sessionId, 'disconnected');
+
         // If this is the currently selected session, update the UI
         if (sessionSelect.value === sessionId) {
             manageUIState('disconnected');

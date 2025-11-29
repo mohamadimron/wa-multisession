@@ -120,3 +120,233 @@ body {
     background-color: #bb2d3b !important;
     border-color: #b02a37 !important;
 }
+
+/* WhatsApp Service Card Styles */
+.card-header {
+    border-bottom: 1px solid rgba(255,255,255,0.1);
+}
+
+.card-header .form-select {
+    background-color: rgba(255,255,255,0.1);
+    border: 1px solid rgba(255,255,255,0.2);
+    color: white;
+    transition: all 0.2s ease;
+}
+
+.card-header .form-select:focus {
+    background-color: rgba(255,255,255,0.15);
+    border-color: #0d6efd;
+    box-shadow: 0 0 0 0.2rem rgba(13, 110, 253, 0.25);
+    color: white;
+}
+
+#whatsapp-status-badge {
+    min-width: 120px;
+    text-align: center;
+    font-weight: 500;
+    letter-spacing: 0.5px;
+}
+
+/* Multisession Status List Styles */
+.session-statuses-list {
+    max-height: 250px;
+    overflow-y: auto;
+    padding-right: 5px;
+    margin-bottom: 15px;
+    border: 1px solid rgba(255,255,255,0.1);
+    border-radius: 8px;
+    padding: 10px;
+    background-color: rgba(0,0,0,0.05);
+}
+
+.session-status-item {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 12px 15px;
+    margin-bottom: 10px;
+    background-color: rgba(255, 255, 255, 0.05);
+    border-radius: 8px;
+    border-left: 4px solid #495057;
+    transition: all 0.2s ease;
+    border: 1px solid rgba(255,255,255,0.1);
+}
+
+.session-status-item:hover {
+    background-color: rgba(255, 255, 255, 0.1);
+    transform: translateY(-1px);
+    box-shadow: 0 4px 8px rgba(0,0,0,0.15);
+}
+
+.session-status-item.active {
+    border-left: 4px solid #20c997;
+    background-color: rgba(32, 201, 151, 0.1);
+    box-shadow: 0 0 0 1px rgba(32, 201, 151, 0.3);
+    border-color: rgba(32, 201, 151, 0.3);
+}
+
+.session-status-item.ready {
+    border-left: 4px solid #198754;
+}
+
+.session-status-item.connecting {
+    border-left: 4px solid #0dcaf0;
+}
+
+.session-status-item.qr {
+    border-left: 4px solid #ffc107;
+}
+
+.session-status-item.disconnected {
+    border-left: 4px solid #dc3545;
+}
+
+.session-status-item.auth_failure {
+    border-left: 4px solid #fd7e14;
+}
+
+.session-name {
+    font-weight: 500;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    flex: 1;
+    min-width: 0; /* Allows text truncation */
+}
+
+.session-name i {
+    font-size: 1.1rem;
+    flex-shrink: 0;
+}
+
+.session-name span {
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    font-size: 0.95rem;
+}
+
+.session-status {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 0.85rem;
+    padding: 5px 12px;
+    border-radius: 20px;
+    font-weight: 500;
+    flex-shrink: 0;
+    min-width: 90px;
+    text-align: center;
+    justify-content: center;
+}
+
+.session-status.badge-success {
+    background-color: #198754 !important;
+}
+
+.session-status.badge-warning {
+    background-color: #ffc107 !important;
+    color: #000 !important;
+}
+
+.session-status.badge-danger {
+    background-color: #dc3545 !important;
+}
+
+.session-status.badge-info {
+    background-color: #0dcaf0 !important;
+    color: #000 !important;
+}
+
+.session-status.badge-secondary {
+    background-color: #6c757d !important;
+}
+
+/* Custom scrollbar for session list */
+.session-statuses-list::-webkit-scrollbar {
+    width: 8px;
+}
+
+.session-statuses-list::-webkit-scrollbar-track {
+    background: rgba(0,0,0,0.1);
+    border-radius: 4px;
+}
+
+.session-statuses-list::-webkit-scrollbar-thumb {
+    background-color: rgba(108, 117, 125, 0.5);
+    border-radius: 4px;
+}
+
+.session-statuses-list::-webkit-scrollbar-thumb:hover {
+    background-color: rgba(108, 117, 125, 0.8);
+}
+
+/* Align session statuses container properly */
+#multisession-status-container {
+    margin-bottom: 20px;
+}
+
+#multisession-status-container h6 {
+    color: #adb5bd;
+    font-weight: 600;
+    margin-bottom: 12px;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-size: 0.95rem;
+}
+
+/* Current session details styling */
+#qr-container {
+    border: 2px dashed rgba(108, 117, 125, 0.3);
+    transition: border-color 0.3s ease;
+}
+
+#qr-container:hover {
+    border-color: rgba(108, 117, 125, 0.5);
+}
+
+#qr-image {
+    border: 1px solid rgba(255,255,255,0.1) !important;
+    transition: transform 0.3s ease;
+}
+
+#qr-image:hover {
+    transform: scale(1.05);
+}
+
+#whatsapp-ready {
+    background-color: rgba(25, 135, 84, 0.1);
+    border-radius: 12px;
+    transition: all 0.3s ease;
+}
+
+/* WhatsApp icon color */
+.bi-whatsapp {
+    color: #25D366;
+}
+
+/* Button styling in header */
+.card-header .btn {
+    padding: 0.375rem 0.75rem;
+    font-size: 0.875rem;
+}
+
+/* Make sure the session list takes full width */
+.current-session-details {
+    padding-top: 5px;
+}
+
+.current-session-details hr {
+    margin: 20px 0;
+    border-top: 1px solid rgba(255,255,255,0.1);
+}
+
+/* Form element styling */
+.form-select {
+    color: #fff;
+}
+
+.form-select option {
+    color: #000;
+}
