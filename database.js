@@ -12,7 +12,7 @@ function initDb() {
                 console.error('Error opening database:', err.message);
                 return reject(err);
             }
-            
+
             console.log('Connected to the SQLite database.');
             newDb.serialize(() => {
                 // Create settings table
@@ -26,11 +26,12 @@ function initDb() {
                     }
                 });
 
-                // Create logs table
+                // Create logs table - added sessionId column for multisession support
                 newDb.run(`CREATE TABLE IF NOT EXISTS logs (
                     id INTEGER PRIMARY KEY AUTOINCREMENT,
                     type TEXT NOT NULL,
                     message TEXT NOT NULL,
+                    session_id TEXT,
                     timestamp DATETIME DEFAULT CURRENT_TIMESTAMP
                 )`, (err) => {
                     if (err) {

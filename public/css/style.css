@@ -54,3 +54,69 @@ body {
     align-items: center;
     justify-content: center;
 }
+
+/* Multisession styles */
+.session-create-form {
+    margin: 20px 0;
+    padding: 20px;
+    background-color: #f8f9fa;
+    border-radius: 8px;
+    border: 1px solid #dee2e6;
+}
+
+.session-create-form input {
+    margin-right: 10px;
+    width: 200px;
+}
+
+.session-card {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 15px;
+    margin: 10px 0;
+    background-color: #f8f9fa;
+    border: 1px solid #dee2e6;
+    border-radius: 8px;
+}
+
+.session-card .session-info h3 {
+    margin: 0 0 8px 0;
+    color: #495057;
+}
+
+.session-card .session-info p {
+    margin: 4px 0;
+    font-size: 0.9rem;
+}
+
+.status {
+    font-weight: bold;
+}
+
+.status.ready {
+    color: #198754;
+}
+
+.status.not-ready {
+    color: #dc3545;
+}
+
+.session-card .session-actions {
+    display: flex;
+    gap: 10px;
+}
+
+.session-card .session-actions button {
+    margin: 0;
+}
+
+.delete-btn {
+    background-color: #dc3545 !important;
+    border-color: #dc3545 !important;
+}
+
+.delete-btn:hover {
+    background-color: #bb2d3b !important;
+    border-color: #b02a37 !important;
+}

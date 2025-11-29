@@ -5,7 +5,7 @@ const path = require('path');
 const qrcode = require('qrcode');
 const logger = require('./logger');
 const { initDb, getDb } = require('./database');
-const whatsappClient = require('./whatsapp');
+const whatsappClient = require('./whatsapp'); // Now a multi-session manager
 
 const app = express();
 const server = http.createServer(app);
@@ -15,7 +15,7 @@ const PORT = process.env.PORT || 3000;
 
 // --- Globals for SSE ---
 const sseClients = new Set();
-let qrCodeData = null;
+const qrCodeData = {}; // Changed to object to store multiple QR codes by session
 
 // --- SSE Helper ---
 function sendSseEvent(event, data) {
@@ -30,32 +30,64 @@ async function main() {
     await initDb();
     const db = getDb();
 
+    // Load existing sessions from data directory
+    await loadExistingSessions();
+
     // --- Attach WhatsApp Event Listeners ---
-    whatsappClient.on('qr', (qr) => {
-        qrCodeData = qr;
+    whatsappClient.on('qr', (data) => {
+        const { sessionId, qr } = data;
+        qrCodeData[sessionId] = qr;
         qrcode.toDataURL(qr).then(url => {
-            sendSseEvent('qr', { dataUrl: url });
-        }).catch(err => logger.error('Failed to generate QR data URL for SSE.', err));
+            sendSseEvent('qr', { sessionId, dataUrl: url });
+        }).catch(err => logger.error(`Failed to generate QR data URL for SSE for session ${sessionId}.`, err));
     });
 
-    whatsappClient.on('ready', () => {
-        qrCodeData = null;
-        sendSseEvent('ready', { message: 'WhatsApp client is ready.' });
+    whatsappClient.on('ready', (data) => {
+        const { sessionId } = data;
+        delete qrCodeData[sessionId]; // Clear QR code for this session
+        sendSseEvent('ready', { sessionId, message: `WhatsApp client is ready for session ${sessionId}.` });
     });
 
-    whatsappClient.on('authenticated', () => {
-        qrCodeData = null;
-        sendSseEvent('status', { message: 'AUTHENTICATING' });
-    });
-    
-    whatsappClient.on('auth_failure', (msg) => {
-        sendSseEvent('status', { message: 'AUTH_FAILURE', details: msg });
+    whatsappClient.on('authenticated', (data) => {
+        const { sessionId } = data;
+        delete qrCodeData[sessionId]; // Clear QR code for this session
+        sendSseEvent('status', { sessionId, message: 'AUTHENTICATING' });
     });
 
-    whatsappClient.on('disconnected', (reason) => {
-        qrCodeData = null;
-        sendSseEvent('disconnected', { message: `Disconnected: ${reason}` });
+    whatsappClient.on('auth_failure', (data) => {
+        const { sessionId, message } = data;
+        delete qrCodeData[sessionId]; // Clear QR code for this session
+        sendSseEvent('status', { sessionId, message: 'AUTH_FAILURE', details: message });
     });
+
+    whatsappClient.on('disconnected', (data) => {
+        const { sessionId, reason } = data;
+        delete qrCodeData[sessionId]; // Clear QR code for this session
+        sendSseEvent('disconnected', { sessionId, message: `Disconnected: ${reason}` });
+    });
+
+    // Function to load existing sessions from the data directory
+    async function loadExistingSessions() {
+        const fs = require('fs');
+        const path = require('path');
+        const dataDir = path.join(__dirname, 'data');
+
+        try {
+            if (fs.existsSync(dataDir)) {
+                const files = fs.readdirSync(dataDir);
+                for (const file of files) {
+                    const filePath = path.join(dataDir, file);
+                    if (fs.statSync(filePath).isDirectory()) {
+                        // Create session for each directory found
+                        const session = whatsappClient.createSession(file);
+                        logger.info(`Session loaded from storage: ${file}`, file);
+                    }
+                }
+            }
+        } catch (error) {
+            logger.error(`Error loading existing sessions: ${error.message}`);
+        }
+    }
 
     // Middleware
     app.use(express.static(path.join(__dirname, 'public')));
@@ -70,12 +102,22 @@ async function main() {
 
         sseClients.add(res);
         logger.info(`SSE client connected. Total: ${sseClients.size}`);
-        
-        // Send initial status
-        if (whatsappClient.isReady()) {
-            sendSseEvent('ready', { message: 'WhatsApp client is ready.' });
-        } else {
-            sendSseEvent('disconnected', { message: 'Client is stopped.' });
+
+        // Send initial status for all sessions
+        const sessions = whatsappClient.getSessionInfo();
+        for (const session of sessions) {
+            if (whatsappClient.isReady(session.sessionId)) {
+                sendSseEvent('ready', { sessionId: session.sessionId, message: `WhatsApp client is ready for session ${session.sessionId}.` });
+            } else {
+                sendSseEvent('disconnected', { sessionId: session.sessionId, message: `Client for session ${session.sessionId} is stopped.` });
+            }
+
+            // If there's a QR code for this session, send it
+            if (qrCodeData[session.sessionId]) {
+                qrcode.toDataURL(qrCodeData[session.sessionId]).then(url => {
+                    sendSseEvent('qr', { sessionId: session.sessionId, dataUrl: url });
+                }).catch(err => logger.error(`Failed to generate QR data URL for SSE for session ${session.sessionId}.`, err));
+            }
         }
 
         req.on('close', () => {
@@ -85,29 +127,105 @@ async function main() {
     });
 
     // --- Control API Routes ---
+    app.post('/api/whatsapp/create-session', (req, res) => {
+        const { sessionId } = req.body;
+        if (!sessionId) {
+            return res.status(400).json({ status: 'error', message: 'Session ID is required.' });
+        }
+
+        logger.info(`Received request to create session: ${sessionId}`);
+        const session = whatsappClient.createSession(sessionId);
+        res.json({ status: 'success', message: `Session ${sessionId} created.`, sessionId });
+    });
+
     app.post('/api/whatsapp/start', (req, res) => {
-        logger.info('Received request to start client...');
-        whatsappClient.initialize();
-        res.json({ status: 'success', message: 'Client initialization started.' });
+        const { sessionId } = req.body;
+        if (!sessionId) {
+            return res.status(400).json({ status: 'error', message: 'Session ID is required.' });
+        }
+
+        logger.info(`Received request to start session: ${sessionId}`);
+        const session = whatsappClient.initialize(sessionId);
+        if (session) {
+            res.json({ status: 'success', message: `Session ${sessionId} initialization started.`, sessionId });
+        } else {
+            res.status(404).json({ status: 'error', message: `Session ${sessionId} does not exist.` });
+        }
     });
 
     app.post('/api/whatsapp/stop', async (req, res) => {
-        logger.info('Received request to stop client...');
-        await whatsappClient.stop();
-        res.json({ status: 'success', message: 'Client stopped.' });
+        const { sessionId } = req.body;
+        if (!sessionId) {
+            return res.status(400).json({ status: 'error', message: 'Session ID is required.' });
+        }
+
+        logger.info(`Received request to stop session: ${sessionId}`);
+        await whatsappClient.stop(sessionId);
+        res.json({ status: 'success', message: `Session ${sessionId} stopped.`, sessionId });
+    });
+
+    app.get('/api/whatsapp/sessions', (req, res) => {
+        // Get all sessions from the session manager
+        const allSessions = whatsappClient.getSessionInfo();
+
+        // Also get all directories in the data folder
+        const fs = require('fs');
+        const path = require('path');
+        const dataDir = path.join(__dirname, 'data');
+        let dataFolders = [];
+
+        if (fs.existsSync(dataDir)) {
+            dataFolders = fs.readdirSync(dataDir).filter(file => {
+                return fs.statSync(path.join(dataDir, file)).isDirectory();
+            });
+        }
+
+        // Filter sessions to include only those that have corresponding data folders
+        // or those that are currently in the session manager
+        const sessions = allSessions.filter(session => {
+            // Always include sessions that are currently in the manager
+            // and also check if there's a physical folder for them
+            return dataFolders.includes(session.sessionId);
+        });
+
+        // Add any data folders that may not be in the session manager yet
+        dataFolders.forEach(folder => {
+            const exists = sessions.some(s => s.sessionId === folder);
+            if (!exists) {
+                sessions.push({
+                    sessionId: folder,
+                    isReady: false,
+                    clientExists: false
+                });
+            }
+        });
+
+        res.json({ status: 'success', sessions });
+    });
+
+    app.delete('/api/whatsapp/session/:sessionId', async (req, res) => {
+        const { sessionId } = req.params;
+        logger.info(`Received request to delete session: ${sessionId}`);
+
+        await whatsappClient.stop(sessionId);
+        whatsappClient.removeSession(sessionId);
+        res.json({ status: 'success', message: `Session ${sessionId} deleted.`, sessionId });
     });
 
     // --- Standard API Routes ---
     app.post('/api/whatsapp/send', async (req, res) => {
-        const { number, message } = req.body;
-        if (!number || !message) {
-            return res.status(400).json({ status: 'error', message: 'Number and message are required.' });
+        const { sessionId, number, message } = req.body;
+        if (!sessionId || !number || !message) {
+            return res.status(400).json({
+                status: 'error',
+                message: 'Session ID, number, and message are required.'
+            });
         }
         try {
-            const result = await whatsappClient.sendMessage(number, message);
+            const result = await whatsappClient.sendMessage(sessionId, number, message);
             res.json({ status: 'success', ...result });
         } catch (error) {
-            logger.error(`API send error: ${error.message}`);
+            logger.error(`API send error for session ${sessionId}: ${error.message}`);
             res.status(500).json({ status: 'error', message: error.message });
         }
     });
