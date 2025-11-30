@@ -1,0 +1,551 @@
+<!DOCTYPE html>
+<html lang="en" data-bs-theme="dark">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Logs - Web App</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.min.css">
+    <link rel="stylesheet" href="/css/style.css">
+    <style>
+        .log-table-container {
+            max-height: 600px;
+            overflow-y: auto;
+        }
+        .log-entry-row {
+            word-break: break-word;
+        }
+        .log-timestamp {
+            white-space: nowrap;
+        }
+        .log-message {
+            min-width: 300px;
+        }
+        .log-type {
+            white-space: nowrap;
+        }
+        .log-session {
+            white-space: nowrap;
+        }
+    </style>
+</head>
+<body>
+    <nav class="navbar navbar-expand-lg navbar-dark bg-dark fixed-top">
+        <div class="container-fluid">
+            <a class="navbar-brand" href="/">
+                <i class="bi bi-speedometer2"></i> WebApp
+            </a>
+            <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbarNav" aria-controls="navbarNav" aria-expanded="false" aria-label="Toggle navigation">
+                <span class="navbar-toggler-icon"></span>
+            </button>
+            <div class="collapse navbar-collapse" id="navbarNav">
+                <ul class="navbar-nav">
+                    <li class="nav-item">
+                        <a class="nav-link" href="/"><i class="bi bi-house-door"></i> Dashboard</a>
+                    </li>
+                    <li class="nav-item">
+                        <a class="nav-link" href="/settings.html"><i class="bi bi-gear"></i> Settings</a>
+                    </li>
+                    <li class="nav-item">
+                        <a class="nav-link active" aria-current="page" href="/logs.html"><i class="bi bi-list-task"></i> Logs</a>
+                    </li>
+                </ul>
+            </div>
+        </div>
+    </nav>
+
+    <main class="container mt-5 pt-4">
+        <div class="row">
+            <!-- Session History Table -->
+            <div class="col-12 mb-4">
+                <div class="card bg-dark-subtle text-light shadow-sm">
+                    <div class="card-header d-flex justify-content-between align-items-center">
+                        <h5 class="card-title mb-0"><i class="bi bi-table"></i> Session History</h5>
+                        <div class="btn-group" role="group">
+                            <button id="delete-all-session-history" class="btn btn-outline-danger btn-sm" title="Delete All Session History">
+                                <i class="bi bi-trash"></i> Clear All
+                            </button>
+                            <button id="refresh-session-history" class="btn btn-outline-primary btn-sm" title="Refresh Session History">
+                                <i class="bi bi-arrow-clockwise"></i> Refresh
+                            </button>
+                        </div>
+                    </div>
+                    <div class="card-body">
+                        <div class="table-responsive log-table-container">
+                            <table class="table table-dark table-striped table-hover">
+                                <thead>
+                                    <tr>
+                                        <th>ID</th>
+                                        <th>Session Name</th>
+                                        <th>Status</th>
+                                        <th>Timestamp</th>
+                                        <th>Actions</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="session-history-table-body">
+                                    <tr>
+                                        <td colspan="5" class="text-center">Loading session history...</td>
+                                    </tr>
+                                </tbody>
+                            </table>
+                        </div>
+                        <div id="session-history-pagination" class="mt-3 d-flex justify-content-center"></div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- System Logs Table -->
+            <div class="col-12">
+                <div class="card bg-dark-subtle text-light shadow-sm">
+                    <div class="card-header d-flex justify-content-between align-items-center">
+                        <h5 class="card-title mb-0"><i class="bi bi-terminal"></i> System Logs</h5>
+                        <div class="btn-group" role="group">
+                            <button id="delete-all-system-logs" class="btn btn-outline-danger btn-sm" title="Delete All System Logs">
+                                <i class="bi bi-trash"></i> Clear All
+                            </button>
+                            <button id="refresh-system-logs" class="btn btn-outline-primary btn-sm" title="Refresh System Logs">
+                                <i class="bi bi-arrow-clockwise"></i> Refresh
+                            </button>
+                        </div>
+                    </div>
+                    <div class="card-body">
+                        <div class="table-responsive log-table-container">
+                            <table class="table table-dark table-striped table-hover">
+                                <thead>
+                                    <tr>
+                                        <th>ID</th>
+                                        <th>Type</th>
+                                        <th>Session</th>
+                                        <th>Message</th>
+                                        <th>Timestamp</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="system-logs-table-body">
+                                    <tr>
+                                        <td colspan="5" class="text-center">Loading system logs...</td>
+                                    </tr>
+                                </tbody>
+                            </table>
+                        </div>
+                        <div id="system-logs-pagination" class="mt-3 d-flex justify-content-center"></div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </main>
+
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
+    <script src="/socket.io/socket.io.js"></script>
+    <script src="/js/main.js"></script>
+    <script>
+        document.addEventListener('DOMContentLoaded', function() {
+            // Pagination state
+            const PaginationState = {
+                sessionHistory: {
+                    page: 1,
+                    limit: 10,
+                    totalPages: 1
+                },
+                systemLogs: {
+                    page: 1,
+                    limit: 10,
+                    totalPages: 1
+                }
+            };
+
+            // Load session history and system logs when page loads
+            loadSessionHistory();
+            loadSystemLogs();
+
+            // Add event listener to refresh session history button
+            const refreshSessionHistoryBtn = document.getElementById('refresh-session-history');
+            if (refreshSessionHistoryBtn) {
+                refreshSessionHistoryBtn.addEventListener('click', function() {
+                    PaginationState.sessionHistory.page = 1;  // Reset to first page
+                    loadSessionHistory();
+                });
+            }
+
+            // Add event listener to delete all session history button
+            const deleteAllSessionHistoryBtn = document.getElementById('delete-all-session-history');
+            if (deleteAllSessionHistoryBtn) {
+                deleteAllSessionHistoryBtn.addEventListener('click', function() {
+                    if (confirm('Are you sure you want to delete ALL session history? This cannot be undone.')) {
+                        deleteAllSessionHistory();
+                    }
+                });
+            }
+
+            // Add event listener to refresh system logs button
+            const refreshSystemLogsBtn = document.getElementById('refresh-system-logs');
+            if (refreshSystemLogsBtn) {
+                refreshSystemLogsBtn.addEventListener('click', function() {
+                    PaginationState.systemLogs.page = 1;  // Reset to first page
+                    loadSystemLogs();
+                });
+            }
+
+            // Add event listener to delete all system logs button
+            const deleteAllSystemLogsBtn = document.getElementById('delete-all-system-logs');
+            if (deleteAllSystemLogsBtn) {
+                deleteAllSystemLogsBtn.addEventListener('click', function() {
+                    if (confirm('Are you sure you want to delete ALL system logs? This cannot be undone.')) {
+                        deleteAllSystemLogs();
+                    }
+                });
+            }
+
+            // Function to load session history from the API with pagination
+            async function loadSessionHistory() {
+                try {
+                    const offset = (PaginationState.sessionHistory.page - 1) * PaginationState.sessionHistory.limit;
+                    const response = await fetch(`/api/sessions/history?limit=${PaginationState.sessionHistory.limit}&offset=${offset}`);
+                    const result = await response.json();
+
+                    if (result.status === 'success') {
+                        renderSessionHistory(result.sessions);
+                        PaginationState.sessionHistory.totalPages = result.pagination.pages;
+                        updateSessionHistoryPaginationUI();
+                    } else {
+                        console.error('Error loading session history:', result.message);
+                        const tbody = document.getElementById('session-history-table-body');
+                        tbody.innerHTML = `<tr><td colspan="5" class="text-center text-danger">Error loading session history: ${result.message}</td></tr>`;
+                    }
+                } catch (error) {
+                    console.error('Error fetching session history:', error);
+                    const tbody = document.getElementById('session-history-table-body');
+                    tbody.innerHTML = `<tr><td colspan="5" class="text-center text-danger">Error loading session history: ${error.message}</td></tr>`;
+                }
+            }
+
+            // Function to load system logs from the API with pagination
+            async function loadSystemLogs() {
+                try {
+                    const offset = (PaginationState.systemLogs.page - 1) * PaginationState.systemLogs.limit;
+                    const response = await fetch(`/api/system/logs?limit=${PaginationState.systemLogs.limit}&offset=${offset}`);
+                    const result = await response.json();
+
+                    if (result.status === 'success') {
+                        renderSystemLogs(result.logs);
+                        PaginationState.systemLogs.totalPages = result.pagination.pages;
+                        updateSystemLogsPaginationUI();
+                    } else {
+                        console.error('Error loading system logs:', result.message);
+                        const tbody = document.getElementById('system-logs-table-body');
+                        tbody.innerHTML = `<tr><td colspan="6" class="text-center text-danger">Error loading system logs: ${result.message}</td></tr>`;
+                    }
+                } catch (error) {
+                    console.error('Error fetching system logs:', error);
+                    const tbody = document.getElementById('system-logs-table-body');
+                    tbody.innerHTML = `<tr><td colspan="6" class="text-center text-danger">Error loading system logs: ${error.message}</td></tr>`;
+                }
+            }
+
+            // Function to delete all session history
+            async function deleteAllSessionHistory() {
+                try {
+                    const response = await fetch('/api/sessions/history', {
+                        method: 'DELETE'
+                    });
+                    const result = await response.json();
+
+                    if (result.status === 'success') {
+                        alert(result.message);
+                        loadSessionHistory(); // Refresh the table
+                    } else {
+                        console.error('Error deleting all session history:', result.message);
+                        alert('Error: ' + result.message);
+                    }
+                } catch (error) {
+                    console.error('Error deleting all session history:', error);
+                    alert('Error: ' + error.message);
+                }
+            }
+
+            // Function to delete all system logs
+            async function deleteAllSystemLogs() {
+                try {
+                    const response = await fetch('/api/system/logs', {
+                        method: 'DELETE'
+                    });
+                    const result = await response.json();
+
+                    if (result.status === 'success') {
+                        alert(result.message);
+                        loadSystemLogs(); // Refresh the table
+                    } else {
+                        console.error('Error deleting all system logs:', result.message);
+                        alert('Error: ' + result.message);
+                    }
+                } catch (error) {
+                    console.error('Error deleting all system logs:', error);
+                    alert('Error: ' + error.message);
+                }
+            }
+
+            // Function to delete session history for a specific session
+            async function deleteSessionHistory(sessionName) {
+                try {
+                    const response = await fetch(`/api/sessions/history/${encodeURIComponent(sessionName)}`, {
+                        method: 'DELETE'
+                    });
+                    const result = await response.json();
+
+                    if (result.status === 'success') {
+                        console.log(result.message);
+                        loadSessionHistory(); // Refresh the table
+                    } else {
+                        console.error('Error deleting session history:', result.message);
+                    }
+                } catch (error) {
+                    console.error('Error deleting session history:', error);
+                }
+            }
+
+            // Function to delete system logs for a specific session
+            async function deleteSystemLogsBySession(sessionId) {
+                try {
+                    const response = await fetch(`/api/system/logs/session/${encodeURIComponent(sessionId)}`, {
+                        method: 'DELETE'
+                    });
+                    const result = await response.json();
+
+                    if (result.status === 'success') {
+                        console.log(result.message);
+                        loadSystemLogs(); // Refresh the table
+                    } else {
+                        console.error('Error deleting system logs for session:', result.message);
+                    }
+                } catch (error) {
+                    console.error('Error deleting system logs for session:', error);
+                }
+            }
+
+            // Function to render session history in the table
+            function renderSessionHistory(sessions) {
+                const tbody = document.getElementById('session-history-table-body');
+
+                if (!sessions || sessions.length === 0) {
+                    tbody.innerHTML = '<tr><td colspan="5" class="text-center">No session history available</td></tr>';
+                    return;
+                }
+
+                let html = '';
+                sessions.forEach(session => {
+                    // Format the timestamp for better readability
+                    const formattedDate = new Date(session.timestamp).toLocaleString();
+
+                    // Get status badge class based on status
+                    let statusClass = 'badge bg-secondary';
+                    let statusText = session.status;
+
+                    switch(session.status.toLowerCase()) {
+                        case 'ready':
+                            statusClass = 'badge bg-success';
+                            break;
+                        case 'qr':
+                            statusClass = 'badge bg-warning text-dark';
+                            break;
+                        case 'authenticated':
+                            statusClass = 'badge bg-info';
+                            break;
+                        case 'auth_failure':
+                            statusClass = 'badge bg-danger';
+                            break;
+                        case 'disconnected':
+                            statusClass = 'badge bg-secondary';
+                            break;
+                        case 'deleted':
+                            statusClass = 'badge bg-danger';
+                            break;
+                        default:
+                            statusClass = 'badge bg-secondary';
+                    }
+
+                    html += `
+                        <tr>
+                            <td>${session.id || '-'}</td>
+                            <td>${session.session_name || '-'}</td>
+                            <td><span class="${statusClass}">${statusText}</span></td>
+                            <td>${formattedDate}</td>
+                            <td>
+                                <button class="btn btn-outline-danger btn-sm btn-delete-session" data-session="${session.session_name}" title="Delete this session's history">
+                                    <i class="bi bi-trash"></i>
+                                </button>
+                            </td>
+                        </tr>
+                    `;
+                });
+
+                tbody.innerHTML = html;
+
+                // Add event listeners to the delete buttons
+                document.querySelectorAll('.btn-delete-session').forEach(button => {
+                    button.addEventListener('click', function() {
+                        const sessionName = this.getAttribute('data-session');
+                        if (confirm(`Are you sure you want to delete session history for "${sessionName}"? This cannot be undone.`)) {
+                            deleteSessionHistory(sessionName);
+                        }
+                    });
+                });
+            }
+
+            // Function to render system logs in the table
+            function renderSystemLogs(logs) {
+                const tbody = document.getElementById('system-logs-table-body');
+
+                if (!logs || logs.length === 0) {
+                    tbody.innerHTML = '<tr><td colspan="5" class="text-center">No system logs available</td></tr>';
+                    return;
+                }
+
+                let html = '';
+                logs.forEach(log => {
+                    // Format the timestamp for better readability
+                    const formattedDate = new Date(log.timestamp).toLocaleString();
+
+                    // Get type badge class based on log type
+                    let typeClass = 'badge bg-secondary';
+                    let typeText = log.type ? log.type.toUpperCase() : 'INFO';
+
+                    switch(log.type) {
+                        case 'info':
+                            typeClass = 'badge bg-info text-dark';
+                            break;
+                        case 'error':
+                            typeClass = 'badge bg-danger';
+                            break;
+                        case 'warn':
+                            typeClass = 'badge bg-warning text-dark';
+                            break;
+                        case 'debug':
+                            typeClass = 'badge bg-secondary';
+                            break;
+                        default:
+                            typeClass = 'badge bg-secondary';
+                    }
+
+                    html += `
+                        <tr class="log-entry-row">
+                            <td>${log.id || '-'}</td>
+                            <td class="log-type"><span class="${typeClass}">${typeText}</span></td>
+                            <td class="log-session">${log.session_id || 'N/A'}</td>
+                            <td class="log-message">${log.message || '-'}</td>
+                            <td class="log-timestamp">${formattedDate}</td>
+                        </tr>
+                    `;
+                });
+
+                tbody.innerHTML = html;
+            }
+
+            // Function to create pagination controls HTML
+            function createPaginationControls(currentPage, totalPages, onPageChange) {
+                if (totalPages <= 1) {
+                    return '<span></span>'; // No pagination needed
+                }
+
+                let html = '<nav><ul class="pagination pagination-sm justify-content-center mb-0">';
+
+                // Previous button
+                if (currentPage > 1) {
+                    html += `<li class="page-item"><a class="page-link" href="#" data-page="${currentPage - 1}">Previous</a></li>`;
+                } else {
+                    html += '<li class="page-item disabled"><span class="page-link">Previous</span></li>';
+                }
+
+                // Page numbers
+                const startPage = Math.max(1, currentPage - 2);
+                const endPage = Math.min(totalPages, currentPage + 2);
+
+                for (let i = startPage; i <= endPage; i++) {
+                    if (i === 1 && startPage > 2) {
+                        // Add first page and ellipsis
+                        html += `<li class="page-item ${i === currentPage ? 'active' : ''}"><a class="page-link" href="#" data-page="1">1</a></li>`;
+                        if (startPage > 2) html += '<li class="page-item disabled"><span class="page-link">...</span></li>';
+                    }
+
+                    if (i >= startPage && i <= endPage) {
+                        html += `<li class="page-item ${i === currentPage ? 'active' : ''}"><a class="page-link" href="#" data-page="${i}">${i}</a></li>`;
+                    }
+
+                    if (i === endPage && endPage < totalPages - 1) {
+                        if (endPage < totalPages - 1) html += '<li class="page-item disabled"><span class="page-link">...</span></li>';
+                        html += `<li class="page-item ${totalPages === currentPage ? 'active' : ''}"><a class="page-link" href="#" data-page="${totalPages}">${totalPages}</a></li>`;
+                    }
+                }
+
+                // Next button
+                if (currentPage < totalPages) {
+                    html += `<li class="page-item"><a class="page-link" href="#" data-page="${currentPage + 1}">Next</a></li>`;
+                } else {
+                    html += '<li class="page-item disabled"><span class="page-link">Next</span></li>';
+                }
+
+                html += '</ul></nav>';
+
+                return html;
+            }
+
+            // Function to update session history pagination UI
+            function updateSessionHistoryPaginationUI() {
+                const paginationContainer = document.getElementById('session-history-pagination');
+                if (paginationContainer) {
+                    paginationContainer.innerHTML = createPaginationControls(
+                        PaginationState.sessionHistory.page,
+                        PaginationState.sessionHistory.totalPages,
+                        function(page) {
+                            PaginationState.sessionHistory.page = page;
+                            loadSessionHistory();
+                        }
+                    );
+
+                    // Add event listeners to pagination links
+                    paginationContainer.querySelectorAll('.page-link').forEach(link => {
+                        if (!link.parentElement.classList.contains('disabled')) {
+                            link.addEventListener('click', function(e) {
+                                e.preventDefault();
+                                const page = parseInt(this.getAttribute('data-page'));
+                                if (!isNaN(page) && page !== PaginationState.sessionHistory.page) {
+                                    PaginationState.sessionHistory.page = page;
+                                    loadSessionHistory();
+                                }
+                            });
+                        }
+                    });
+                }
+            }
+
+            // Function to update system logs pagination UI
+            function updateSystemLogsPaginationUI() {
+                const paginationContainer = document.getElementById('system-logs-pagination');
+                if (paginationContainer) {
+                    paginationContainer.innerHTML = createPaginationControls(
+                        PaginationState.systemLogs.page,
+                        PaginationState.systemLogs.totalPages,
+                        function(page) {
+                            PaginationState.systemLogs.page = page;
+                            loadSystemLogs();
+                        }
+                    );
+
+                    // Add event listeners to pagination links
+                    paginationContainer.querySelectorAll('.page-link').forEach(link => {
+                        if (!link.parentElement.classList.contains('disabled')) {
+                            link.addEventListener('click', function(e) {
+                                e.preventDefault();
+                                const page = parseInt(this.getAttribute('data-page'));
+                                if (!isNaN(page) && page !== PaginationState.systemLogs.page) {
+                                    PaginationState.systemLogs.page = page;
+                                    loadSystemLogs();
+                                }
+                            });
+                        }
+                    });
+                }
+            }
+
+        });
+    </script>
+</body>
+</html>

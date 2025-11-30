@@ -100,7 +100,9 @@ document.addEventListener('DOMContentLoaded', () => {
                 if (status === 'ready') {
                     // For ready sessions, update status to ready and show the ready panel
                     updateWhatsappStatus('READY', 'success'); // Set status to ready instead of loading chat history
+                    document.getElementById('ready-session-name').textContent = sessionId; // Show the session name
                     whatsappReadyContainer.classList.remove('d-none'); // Show the ready panel
+
                 } else if (status === 'qr') {
                     // For QR sessions, show the QR code
                     updateWhatsappStatus('QR SCAN', 'warning');
@@ -252,6 +254,13 @@ document.addEventListener('DOMContentLoaded', () => {
 
         console.log(`Start button clicked for session: ${currentSession}`);
         updateWhatsappStatus('STARTING...', 'info');
+
+        // Update session state to starting and update the UI immediately
+        if (sessionStates[currentSession]) {
+            sessionStates[currentSession].status = 'starting';
+            updateSessionStatusUI(currentSession, 'starting'); // Update the session item in the list
+        }
+
         fetch('/api/whatsapp/start', {
             method: 'POST',
             headers: {
@@ -270,6 +279,13 @@ document.addEventListener('DOMContentLoaded', () => {
 
         console.log(`Stop button clicked for session: ${currentSession}`);
         updateWhatsappStatus('STOPPING...', 'warning');
+
+        // Update session state to stopping and update the UI immediately
+        if (sessionStates[currentSession]) {
+            sessionStates[currentSession].status = 'stopping';
+            updateSessionStatusUI(currentSession, 'stopping'); // Update the session item in the list
+        }
+
         fetch('/api/whatsapp/stop', {
             method: 'POST',
             headers: {
@@ -450,6 +466,7 @@ document.addEventListener('DOMContentLoaded', () => {
             } else if (status === 'ready') {
                 // Don't show the basic "WhatsApp is Connected" panel, let user click to see chat history
                 // Keep it hidden and they can click the "Load Chat History" button or session item
+                document.getElementById('ready-session-name').textContent = selectedSession; // Set the session name
             } else if (status === 'disconnected' || status === 'stopped') {
                 // Show stopped panel for disconnected sessions and update session name
                 document.getElementById('stopped-session-name').textContent = selectedSession;
@@ -541,6 +558,11 @@ document.addEventListener('DOMContentLoaded', () => {
             updateWhatsappStatus('READY', 'success');
             btnStart.classList.add('d-none');
             btnStop.classList.remove('d-none');
+            // Update the ready session name when status is ready
+            const currentSession = sessionSelect.value;
+            if (currentSession && sessionStates[currentSession]) {
+                document.getElementById('ready-session-name').textContent = currentSession; // Set the session name
+            }
             // Don't automatically show whatsappReadyContainer - let user click to see options
         } else if (state === 'disconnected') {
             updateWhatsappStatus('STOPPED', 'danger');
@@ -587,8 +609,7 @@ document.addEventListener('DOMContentLoaded', () => {
             }
         }
 
-        let status = message.toLowerCase().includes('ready') ? 'ready' :
-                     message.toLowerCase().includes('stop') ? 'disconnected' :
+        let status = message.toLowerCase().includes('stop') ? 'disconnected' :
                      message.toLowerCase().includes('auth_failure') ? 'auth_failure' : message;
 
         sessionStates[sessionId].status = status;
@@ -612,8 +633,10 @@ document.addEventListener('DOMContentLoaded', () => {
                 if (currentStatus === 'qr') {
                     qrContainer.classList.remove('d-none');
                 } else if (currentStatus === 'ready') {
+                    document.getElementById('ready-session-name').textContent = sessionId; // Set the session name
                     // Don't automatically show ready panel - user can click to see chat history
                 } else if (currentStatus === 'disconnected' || currentStatus === 'stopped') {
+                    document.getElementById('stopped-session-name').textContent = sessionId; // Set the session name
                     whatsappStoppedContainer.classList.remove('d-none');
                 }
             }
@@ -706,6 +729,7 @@ document.addEventListener('DOMContentLoaded', () => {
         if (sessionSelect.value === sessionId) {
             manageUIState('ready');
             updateWhatsappStatus('READY', 'success');
+            document.getElementById('ready-session-name').textContent = sessionId; // Set the session name
 
             // Update what's displayed based on the new status if user hasn't actively switched views
             // Only update display if not currently viewing chat history
@@ -889,10 +913,12 @@ document.addEventListener('DOMContentLoaded', () => {
 
                 // Reset to showing status-appropriate view
                 if (status === 'ready') {
+                    document.getElementById('ready-session-name').textContent = selectedSession; // Set the session name
                     whatsappReadyContainer.classList.remove('d-none');
                 } else if (status === 'qr') {
                     qrContainer.classList.remove('d-none');
                 } else if (status === 'disconnected' || status === 'stopped') {
+                    document.getElementById('stopped-session-name').textContent = selectedSession; // Set the session name for stopped
                     whatsappStoppedContainer.classList.remove('d-none');
                 }
             }
@@ -932,6 +958,12 @@ document.addEventListener('DOMContentLoaded', () => {
 
             console.log(`Start session button clicked for session: ${sessionId}`);
             updateWhatsappStatus('STARTING...', 'info');
+
+            // Update session state to starting and update the UI immediately
+            if (sessionStates[sessionId]) {
+                sessionStates[sessionId].status = 'starting';
+                updateSessionStatusUI(sessionId, 'starting'); // Update the session item in the list
+            }
 
             // Update button states to show that start is in progress
             btnStart.classList.add('d-none');

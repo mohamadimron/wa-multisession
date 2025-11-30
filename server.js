@@ -4,7 +4,7 @@ const { Server } = require("socket.io");
 const path = require('path');
 const qrcode = require('qrcode');
 const logger = require('./logger');
-const { initDb, getDb } = require('./database');
+const { initDb, getDb, insertSessionStatus, getSessionHistory, deleteAllSessionHistory, deleteSessionHistory, getSessionHistoryCount, getSystemLogs, getSystemLogsCount, deleteAllSystemLogs, deleteSystemLogsBySession } = require('./database');
 const whatsappClient = require('./whatsapp'); // Now a multi-session manager
 
 const app = express();
@@ -40,30 +40,45 @@ async function main() {
         qrcode.toDataURL(qr).then(url => {
             sendSseEvent('qr', { sessionId, dataUrl: url });
         }).catch(err => logger.error(`Failed to generate QR data URL for SSE for session ${sessionId}.`, err));
+
+        // Log session status change to database
+        insertSessionStatus(sessionId, 'qr').catch(err => logger.error(`Failed to insert QR status for session ${sessionId}:`, err));
     });
 
     whatsappClient.on('ready', (data) => {
         const { sessionId } = data;
         delete qrCodeData[sessionId]; // Clear QR code for this session
         sendSseEvent('ready', { sessionId, message: `WhatsApp client is ready for session ${sessionId}.` });
+
+        // Log session status change to database
+        insertSessionStatus(sessionId, 'ready').catch(err => logger.error(`Failed to insert ready status for session ${sessionId}:`, err));
     });
 
     whatsappClient.on('authenticated', (data) => {
         const { sessionId } = data;
         delete qrCodeData[sessionId]; // Clear QR code for this session
         sendSseEvent('status', { sessionId, message: 'AUTHENTICATING' });
+
+        // Log session status change to database
+        insertSessionStatus(sessionId, 'authenticated').catch(err => logger.error(`Failed to insert authenticated status for session ${sessionId}:`, err));
     });
 
     whatsappClient.on('auth_failure', (data) => {
         const { sessionId, message } = data;
         delete qrCodeData[sessionId]; // Clear QR code for this session
         sendSseEvent('status', { sessionId, message: 'AUTH_FAILURE', details: message });
+
+        // Log session status change to database
+        insertSessionStatus(sessionId, 'auth_failure').catch(err => logger.error(`Failed to insert auth_failure status for session ${sessionId}:`, err));
     });
 
     whatsappClient.on('disconnected', (data) => {
         const { sessionId, reason } = data;
         delete qrCodeData[sessionId]; // Clear QR code for this session
         sendSseEvent('disconnected', { sessionId, message: `Disconnected: ${reason}` });
+
+        // Log session status change to database
+        insertSessionStatus(sessionId, 'disconnected').catch(err => logger.error(`Failed to insert disconnected status for session ${sessionId}:`, err));
     });
 
     // Function to load existing sessions from the data directory
@@ -77,10 +92,17 @@ async function main() {
                 const files = fs.readdirSync(dataDir);
                 for (const file of files) {
                     const filePath = path.join(dataDir, file);
-                    if (fs.statSync(filePath).isDirectory()) {
+                    if (fs.statSync(filePath).isDirectory() && file !== 'database.sqlite') { // Exclude database file
                         // Create session for each directory found
                         const session = whatsappClient.createSession(file);
                         logger.info(`Session loaded from storage: ${file}`, file);
+
+                        // Log session loaded status to database
+                        try {
+                            await insertSessionStatus(file, 'loaded');
+                        } catch (err) {
+                            logger.error(`Failed to insert loaded status for session ${file}:`, err);
+                        }
                     }
                 }
             }
@@ -90,44 +112,11 @@ async function main() {
     }
 
     // Middleware
-    app.use(express.static(path.join(__dirname, 'public')));
     app.use(express.json());
 
-    // --- SSE Endpoint ---
-    app.get('/qr-stream', (req, res) => {
-        res.setHeader('Content-Type', 'text/event-stream');
-        res.setHeader('Cache-Control', 'no-cache');
-        res.setHeader('Connection', 'keep-alive');
-        res.flushHeaders();
-
-        sseClients.add(res);
-        logger.info(`SSE client connected. Total: ${sseClients.size}`);
-
-        // Send initial status for all sessions
-        const sessions = whatsappClient.getSessionInfo();
-        for (const session of sessions) {
-            if (whatsappClient.isReady(session.sessionId)) {
-                sendSseEvent('ready', { sessionId: session.sessionId, message: `WhatsApp client is ready for session ${session.sessionId}.` });
-            } else {
-                sendSseEvent('disconnected', { sessionId: session.sessionId, message: `Client for session ${session.sessionId} is stopped.` });
-            }
-
-            // If there's a QR code for this session, send it
-            if (qrCodeData[session.sessionId]) {
-                qrcode.toDataURL(qrCodeData[session.sessionId]).then(url => {
-                    sendSseEvent('qr', { sessionId: session.sessionId, dataUrl: url });
-                }).catch(err => logger.error(`Failed to generate QR data URL for SSE for session ${session.sessionId}.`, err));
-            }
-        }
-
-        req.on('close', () => {
-            sseClients.delete(res);
-            logger.info(`SSE client disconnected. Total: ${sseClients.size}`);
-        });
-    });
-
+    // --- API Routes (These must be defined BEFORE static middleware) ---
     // --- Control API Routes ---
-    app.post('/api/whatsapp/create-session', (req, res) => {
+    app.post('/api/whatsapp/create-session', async (req, res) => {
         const { sessionId } = req.body;
         if (!sessionId) {
             return res.status(400).json({ status: 'error', message: 'Session ID is required.' });
@@ -135,16 +124,32 @@ async function main() {
 
         logger.info(`Received request to create session: ${sessionId}`);
         const session = whatsappClient.createSession(sessionId);
+
+        // Log session creation to database with initial status
+        try {
+            await insertSessionStatus(sessionId, 'created');
+        } catch (err) {
+            logger.error(`Failed to insert created status for session ${sessionId}:`, err);
+        }
+
         res.json({ status: 'success', message: `Session ${sessionId} created.`, sessionId });
     });
 
-    app.post('/api/whatsapp/start', (req, res) => {
+    app.post('/api/whatsapp/start', async (req, res) => {
         const { sessionId } = req.body;
         if (!sessionId) {
             return res.status(400).json({ status: 'error', message: 'Session ID is required.' });
         }
 
         logger.info(`Received request to start session: ${sessionId}`);
+
+        // Log session start attempt to database
+        try {
+            await insertSessionStatus(sessionId, 'starting');
+        } catch (err) {
+            logger.error(`Failed to insert starting status for session ${sessionId}:`, err);
+        }
+
         const session = whatsappClient.initialize(sessionId);
         if (session) {
             res.json({ status: 'success', message: `Session ${sessionId} initialization started.`, sessionId });
@@ -160,6 +165,14 @@ async function main() {
         }
 
         logger.info(`Received request to stop session: ${sessionId}`);
+
+        // Log session stop attempt to database
+        try {
+            await insertSessionStatus(sessionId, 'stopping');
+        } catch (err) {
+            logger.error(`Failed to insert stopping status for session ${sessionId}:`, err);
+        }
+
         await whatsappClient.stop(sessionId);
         res.json({ status: 'success', message: `Session ${sessionId} stopped.`, sessionId });
     });
@@ -208,7 +221,16 @@ async function main() {
         logger.info(`Received request to delete session: ${sessionId}`);
 
         await whatsappClient.stop(sessionId);
+
+        // Log session deletion status to database
+        try {
+            await insertSessionStatus(sessionId, 'deleted');
+        } catch (err) {
+            logger.error(`Failed to insert deletion status for session ${sessionId}:`, err);
+        }
+
         whatsappClient.removeSession(sessionId);
+
         res.json({ status: 'success', message: `Session ${sessionId} deleted.`, sessionId });
     });
 
@@ -265,6 +287,134 @@ async function main() {
         }
     });
 
+    // API endpoint to get session history from database with pagination
+    app.get('/api/sessions/history', async (req, res) => {
+        try {
+            const { limit = 10, offset = 0 } = req.query;
+            const sessions = await getSessionHistory(parseInt(limit), parseInt(offset));
+            const totalCount = await getSessionHistoryCount();
+
+            res.json({
+                status: 'success',
+                sessions: sessions,
+                pagination: {
+                    limit: parseInt(limit),
+                    offset: parseInt(offset),
+                    total: totalCount,
+                    pages: Math.ceil(totalCount / parseInt(limit))
+                }
+            });
+        } catch (error) {
+            logger.error(`API session history error: ${error.message}`);
+            res.status(500).json({
+                status: 'error',
+                message: error.message
+            });
+        }
+    });
+
+    // API endpoint to delete session history for a specific session (define this BEFORE the static route)
+    app.delete('/api/sessions/history/:sessionName', async (req, res) => {
+        const { sessionName } = req.params;
+        try {
+            const deletedCount = await deleteSessionHistory(sessionName);
+            res.json({
+                status: 'success',
+                message: `Deleted session history for ${sessionName}. Removed ${deletedCount} records.`,
+                deletedCount: deletedCount,
+                sessionName: sessionName
+            });
+        } catch (error) {
+            logger.error(`API delete session history error: ${error.message}`);
+            res.status(500).json({
+                status: 'error',
+                message: error.message
+            });
+        }
+    });
+
+    // API endpoint to delete all session history (this should come after the parameterized route)
+    app.delete('/api/sessions/history', async (req, res) => {
+        try {
+            const deletedCount = await deleteAllSessionHistory();
+            res.json({
+                status: 'success',
+                message: `Deleted all session history. Removed ${deletedCount} records.`,
+                deletedCount: deletedCount
+            });
+        } catch (error) {
+            logger.error(`API delete all session history error: ${error.message}`);
+            res.status(500).json({
+                status: 'error',
+                message: error.message
+            });
+        }
+    });
+
+    // API endpoint to get system logs from database
+    app.get('/api/system/logs', async (req, res) => {
+        try {
+            const { limit = 10, offset = 0 } = req.query;
+            const logs = await getSystemLogs(parseInt(limit), parseInt(offset));
+            const totalCount = await getSystemLogsCount();
+
+            res.json({
+                status: 'success',
+                logs: logs,
+                pagination: {
+                    limit: parseInt(limit),
+                    offset: parseInt(offset),
+                    total: totalCount,
+                    pages: Math.ceil(totalCount / parseInt(limit))
+                }
+            });
+        } catch (error) {
+            logger.error(`API system logs error: ${error.message}`);
+            res.status(500).json({
+                status: 'error',
+                message: error.message
+            });
+        }
+    });
+
+    // API endpoint to delete all system logs
+    app.delete('/api/system/logs', async (req, res) => {
+        try {
+            const deletedCount = await deleteAllSystemLogs();
+            res.json({
+                status: 'success',
+                message: `Deleted all system logs. Removed ${deletedCount} records.`,
+                deletedCount: deletedCount
+            });
+        } catch (error) {
+            logger.error(`API delete all system logs error: ${error.message}`);
+            res.status(500).json({
+                status: 'error',
+                message: error.message
+            });
+        }
+    });
+
+    // API endpoint to delete system logs for a specific session
+    app.delete('/api/system/logs/session/:sessionId', async (req, res) => {
+        const { sessionId } = req.params;
+        try {
+            const deletedCount = await deleteSystemLogsBySession(sessionId);
+            res.json({
+                status: 'success',
+                message: `Deleted system logs for session ${sessionId}. Removed ${deletedCount} records.`,
+                deletedCount: deletedCount,
+                sessionId: sessionId
+            });
+        } catch (error) {
+            logger.error(`API delete system logs for session error: ${error.message}`);
+            res.status(500).json({
+                status: 'error',
+                message: error.message
+            });
+        }
+    });
+
     // --- Standard API Routes ---
     app.post('/api/whatsapp/send', async (req, res) => {
         const { sessionId, number, message } = req.body;
@@ -282,6 +432,9 @@ async function main() {
             res.status(500).json({ status: 'error', message: error.message });
         }
     });
+
+    // Static file serving (MUST be after all API routes)
+    app.use(express.static(path.join(__dirname, 'public')));
 
     // Socket.IO for logs
     io.on('connection', (socket) => {
