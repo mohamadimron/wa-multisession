@@ -81,6 +81,8 @@ document.addEventListener('DOMContentLoaded', () => {
         `;
 
         // Add click event to select the session in the dropdown and display appropriate content based on status
+        // REMARK: This function handles the flow when a session item is clicked in the list
+        // It now sets the WhatsApp status to ready instead of automatically loading chat history
         item.addEventListener('click', async () => {
             sessionSelect.value = sessionId;
             sessionSelect.dispatchEvent(new Event('change')); // Trigger the change event to update UI
@@ -96,16 +98,17 @@ document.addEventListener('DOMContentLoaded', () => {
                 whatsappStoppedContainer.classList.add('d-none');
 
                 if (status === 'ready') {
-                    // For ready sessions, show chat history
-                    whatsappReadyContainer.classList.add('d-none'); // Don't show the basic "connected" message
-                    chatHistoryContainer.classList.remove('d-none'); // Show chat history panel
-                    await loadChatHistory(); // Load the chat history
+                    // For ready sessions, update status to ready and show the ready panel
+                    updateWhatsappStatus('READY', 'success'); // Set status to ready instead of loading chat history
+                    whatsappReadyContainer.classList.remove('d-none'); // Show the ready panel
                 } else if (status === 'qr') {
                     // For QR sessions, show the QR code
+                    updateWhatsappStatus('QR SCAN', 'warning');
                     qrContainer.classList.remove('d-none');
                 } else if (status === 'disconnected' || status === 'stopped') {
                     // For disconnected/stopped sessions, show stopped panel and update session name
                     document.getElementById('stopped-session-name').textContent = sessionId;
+                    updateWhatsappStatus('STOPPED', 'danger');
                     whatsappStoppedContainer.classList.remove('d-none');
                 } else {
                     // For other states (connecting, authenticating, etc.), update status accordingly
@@ -845,7 +848,7 @@ document.addEventListener('DOMContentLoaded', () => {
         chatHistoryContent.innerHTML = '';
 
         try {
-            const response = await fetch(`/api/whatsapp/chat-history/${sessionId}?limit=50`);
+            const response = await fetch(`/api/whatsapp/chat-history/${sessionId}?limit=5`); // default 50
             const result = await response.json();
 
             if (result.status === 'success') {
