@@ -102,6 +102,138 @@ class WhatsAppSession extends EventEmitter {
             logger.info(`WhatsApp client disconnected: ${reason}`, this.sessionId);
             this.emit('disconnected', { sessionId: this.sessionId, reason });
         });
+
+        // Add comprehensive message handling events
+        this.client.on('message_create', (message) => {
+            logger.info(`New message created - From: ${message.from}, To: ${message.to}, Type: ${message.type}`, this.sessionId);
+            this.emit('message_create', {
+                sessionId: this.sessionId,
+                message: this.formatMessage(message)
+            });
+        });
+
+        this.client.on('message', (message) => {
+            logger.info(`Message received - From: ${message.from}, To: ${message.to}, Body: ${message.body || '[Media/Other]'}`, this.sessionId);
+            this.emit('message', {
+                sessionId: this.sessionId,
+                message: this.formatMessage(message)
+            });
+        });
+
+        this.client.on('message_ack', (message, ack) => {
+            const ackStatus = ['ACK_ERROR', 'ACK_PENDING', 'ACK_SERVER', 'ACK_DEVICE', 'ACK_READ', 'ACK_PLAYED'];
+            logger.info(`Message ack status: ${ackStatus[ack]} - ID: ${message.id._serialized}`, this.sessionId);
+            this.emit('message_ack', {
+                sessionId: this.sessionId,
+                messageId: message.id._serialized,
+                status: ackStatus[ack],
+                timestamp: Date.now()
+            });
+        });
+
+        this.client.on('message_revoke_everyone', (message, revoked_msg) => {
+            logger.info(`Message revoked by everyone - From: ${message.from}, To: ${message.to}`, this.sessionId);
+            this.emit('message_revoke_everyone', {
+                sessionId: this.sessionId,
+                message: this.formatMessage(message),
+                revokedMessage: this.formatMessage(revoked_msg)
+            });
+        });
+
+        this.client.on('message_revoke_me', (message) => {
+            logger.info(`Message revoked by me - From: ${message.from}, To: ${message.to}`, this.sessionId);
+            this.emit('message_revoke_me', {
+                sessionId: this.sessionId,
+                message: this.formatMessage(message)
+            });
+        });
+
+        this.client.on('media_uploaded', (message) => {
+            logger.info(`Media uploaded - ID: ${message.id._serialized}`, this.sessionId);
+            this.emit('media_uploaded', {
+                sessionId: this.sessionId,
+                messageId: message.id._serialized
+            });
+        });
+
+        // Group events
+        this.client.on('group_join', (notification) => {
+            logger.info(`Contact joined group: ${notification.body}`, this.sessionId);
+            this.emit('group_join', {
+                sessionId: this.sessionId,
+                notification: this.formatNotification(notification)
+            });
+        });
+
+        this.client.on('group_leave', (notification) => {
+            logger.info(`Contact left group: ${notification.body}`, this.sessionId);
+            this.emit('group_leave', {
+                sessionId: this.sessionId,
+                notification: this.formatNotification(notification)
+            });
+        });
+
+        this.client.on('group_update', (notification) => {
+            logger.info(`Group updated: ${notification.body}`, this.sessionId);
+            this.emit('group_update', {
+                sessionId: this.sessionId,
+                notification: this.formatNotification(notification)
+            });
+        });
+
+        // Contact and chat events
+        this.client.on('contact_changed', (message, oldId, newId, isContact) => {
+            logger.info(`Contact changed: ${oldId._serialized} to ${newId._serialized}`, this.sessionId);
+            this.emit('contact_changed', {
+                sessionId: this.sessionId,
+                oldId: oldId._serialized,
+                newId: newId._serialized,
+                isContact: isContact
+            });
+        });
+
+        this.client.on('group_admin_changed', (notification) => {
+            logger.info(`Group admin changed: ${notification.body}`, this.sessionId);
+            this.emit('group_admin_changed', {
+                sessionId: this.sessionId,
+                notification: this.formatNotification(notification)
+            });
+        });
+    }
+
+    formatMessage(message) {
+        return {
+            id: message.id._serialized,
+            from: message.from,
+            to: message.to,
+            timestamp: message.timestamp,
+            body: message.body || '[Media/Other]',
+            type: message.type,
+            fromMe: message.fromMe,
+            author: message.author,
+            isForwarded: message.isForwarded,
+            hasMedia: message.hasMedia,
+            chatId: message.chatId || (message._data?.chatId?._serialized),
+            isGroupMsg: message.isGroupMsg,
+            isStatus: message.isStatus,
+            deviceType: message.deviceType,
+            duration: message.duration
+        };
+    }
+
+    formatNotification(notification) {
+        return {
+            id: notification.id?._serialized,
+            body: notification.body,
+            type: notification.type,
+            subtype: notification.subtype,
+            timestamp: notification.timestamp,
+            chatId: notification.chatId?._serialized,
+            author: notification.author,
+            isGroup: notification.isGroup,
+            isStatus: notification.isStatus,
+            isUnread: notification.isUnread
+        };
     }
 
     async stop() {

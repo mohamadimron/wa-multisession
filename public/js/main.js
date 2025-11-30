@@ -104,7 +104,7 @@ document.addEventListener('DOMContentLoaded', () => {
                     whatsappReadyContainer.classList.remove('d-none'); // Show the ready panel
 
                 } else if (status === 'qr') {
-                    // For QR sessions, show the QR code
+                    // For QR sessions, show the QR code.
                     updateWhatsappStatus('QR SCAN', 'warning');
                     qrContainer.classList.remove('d-none');
                 } else if (status === 'disconnected' || status === 'stopped') {
@@ -730,7 +730,7 @@ document.addEventListener('DOMContentLoaded', () => {
             manageUIState('ready');
             updateWhatsappStatus('READY', 'success');
             document.getElementById('ready-session-name').textContent = sessionId; // Set the session name
-
+            console.log('--ready');
             // Update what's displayed based on the new status if user hasn't actively switched views
             // Only update display if not currently viewing chat history
             if (chatHistoryContainer.classList.contains('d-none')) {
@@ -738,7 +738,9 @@ document.addEventListener('DOMContentLoaded', () => {
                 whatsappReadyContainer.classList.add('d-none');
                 whatsappStoppedContainer.classList.add('d-none');
 
-                // Ready session - don't automatically show the ready panel, keep it hidden for user to click
+                // Show ready panel when status becomes ready
+                document.getElementById('ready-session-name').textContent = sessionId;
+                whatsappReadyContainer.classList.remove('d-none');
             }
         }
     });
@@ -793,11 +795,452 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     });
 
+    // Add comprehensive WhatsApp event listeners
+    sse.addEventListener('message', (e) => {
+        const payload = JSON.parse(e.data);
+        const { sessionId, message } = payload;
+
+        console.log('SSE event: message -', message.body || `[${message.type} message]`, 'for session', sessionId);
+
+        // Add message log to the log container
+        if (logContainer) {
+            const logEntry = document.createElement('div');
+            const timestamp = message.timestamp ? new Date(message.timestamp * 1000).toLocaleTimeString() : new Date().toLocaleTimeString();
+            const prefix = sessionId ? `[${sessionId}] ` : '';
+            const messageType = message.fromMe ? 'SENT' : 'RECEIVED';
+            logEntry.className = `log-entry text-${message.fromMe ? 'info' : 'light'}`;
+            logEntry.innerHTML = `<small>${timestamp}</small> ${prefix}[${messageType}] ${message.body || `[${message.type} message]`}`;
+            logContainer.appendChild(logEntry);
+            logContainer.scrollTop = logContainer.scrollHeight;
+        }
+    });
+
+    sse.addEventListener('message_create', (e) => {
+        const payload = JSON.parse(e.data);
+        const { sessionId, message } = payload;
+
+        console.log('SSE event: message_create -', message.body || `[${message.type} message]`, 'for session', sessionId);
+
+        // Add message creation log
+        if (logContainer) {
+            const logEntry = document.createElement('div');
+            const timestamp = message.timestamp ? new Date(message.timestamp * 1000).toLocaleTimeString() : new Date().toLocaleTimeString();
+            const prefix = sessionId ? `[${sessionId}] ` : '';
+            logEntry.className = `log-entry text-info`;
+            logEntry.innerHTML = `<small>${timestamp}</small> ${prefix}[MESSAGE CREATE] ${message.body || `[${message.type} message]`}`;
+            logContainer.appendChild(logEntry);
+            logContainer.scrollTop = logContainer.scrollHeight;
+        }
+    });
+
+    sse.addEventListener('message_ack', (e) => {
+        const payload = JSON.parse(e.data);
+        const { sessionId, messageId, status, timestamp } = payload;
+
+        console.log('SSE event: message_ack -', status, 'for message', messageId, 'in session', sessionId);
+
+        // Add message acknowledgment log
+        if (logContainer) {
+            const logEntry = document.createElement('div');
+            const formattedTimestamp = timestamp ? new Date(timestamp).toLocaleTimeString() : new Date().toLocaleTimeString();
+            const prefix = sessionId ? `[${sessionId}] ` : '';
+            logEntry.className = `log-entry text-info`;
+            logEntry.innerHTML = `<small>${formattedTimestamp}</small> ${prefix}[MESSAGE ACK] ${status} - ${messageId}`;
+            logContainer.appendChild(logEntry);
+            logContainer.scrollTop = logContainer.scrollHeight;
+        }
+    });
+
+    sse.addEventListener('message_revoke_everyone', (e) => {
+        const payload = JSON.parse(e.data);
+        const { sessionId, message } = payload;
+
+        console.log('SSE event: message_revoke_everyone -', 'for session', sessionId);
+
+        // Add message revocation log
+        if (logContainer) {
+            const logEntry = document.createElement('div');
+            const timestamp = message.timestamp ? new Date(message.timestamp * 1000).toLocaleTimeString() : new Date().toLocaleTimeString();
+            const prefix = sessionId ? `[${sessionId}] ` : '';
+            logEntry.className = `log-entry text-warning`;
+            logEntry.innerHTML = `<small>${timestamp}</small> ${prefix}[MESSAGE REVOKED] Message was revoked by everyone`;
+            logContainer.appendChild(logEntry);
+            logContainer.scrollTop = logContainer.scrollHeight;
+        }
+    });
+
+    sse.addEventListener('message_revoke_me', (e) => {
+        const payload = JSON.parse(e.data);
+        const { sessionId, message } = payload;
+
+        console.log('SSE event: message_revoke_me -', 'for session', sessionId);
+
+        // Add message revocation log
+        if (logContainer) {
+            const logEntry = document.createElement('div');
+            const timestamp = message.timestamp ? new Date(message.timestamp * 1000).toLocaleTimeString() : new Date().toLocaleTimeString();
+            const prefix = sessionId ? `[${sessionId}] ` : '';
+            logEntry.className = `log-entry text-warning`;
+            logEntry.innerHTML = `<small>${timestamp}</small> ${prefix}[MESSAGE REVOKED BY ME] Message was revoked by me`;
+            logContainer.appendChild(logEntry);
+            logContainer.scrollTop = logContainer.scrollHeight;
+        }
+    });
+
+    sse.addEventListener('media_uploaded', (e) => {
+        const payload = JSON.parse(e.data);
+        const { sessionId, messageId } = payload;
+
+        console.log('SSE event: media_uploaded -', 'for message', messageId, 'in session', sessionId);
+
+        // Add media upload log
+        if (logContainer) {
+            const logEntry = document.createElement('div');
+            const timestamp = new Date().toLocaleTimeString();
+            const prefix = sessionId ? `[${sessionId}] ` : '';
+            logEntry.className = `log-entry text-info`;
+            logEntry.innerHTML = `<small>${timestamp}</small> ${prefix}[MEDIA UPLOADED] Media uploaded - ID: ${messageId}`;
+            logContainer.appendChild(logEntry);
+            logContainer.scrollTop = logContainer.scrollHeight;
+        }
+    });
+
+    // Group events
+    sse.addEventListener('group_join', (e) => {
+        const payload = JSON.parse(e.data);
+        const { sessionId, notification } = payload;
+
+        console.log('SSE event: group_join -', notification.body, 'in session', sessionId);
+
+        // Add group join log
+        if (logContainer) {
+            const logEntry = document.createElement('div');
+            const timestamp = notification.timestamp ? new Date(notification.timestamp * 1000).toLocaleTimeString() : new Date().toLocaleTimeString();
+            const prefix = sessionId ? `[${sessionId}] ` : '';
+            logEntry.className = `log-entry text-info`;
+            logEntry.innerHTML = `<small>${timestamp}</small> ${prefix}[GROUP JOIN] ${notification.body}`;
+            logContainer.appendChild(logEntry);
+            logContainer.scrollTop = logContainer.scrollHeight;
+        }
+    });
+
+    sse.addEventListener('group_leave', (e) => {
+        const payload = JSON.parse(e.data);
+        const { sessionId, notification } = payload;
+
+        console.log('SSE event: group_leave -', notification.body, 'in session', sessionId);
+
+        // Add group leave log
+        if (logContainer) {
+            const logEntry = document.createElement('div');
+            const timestamp = notification.timestamp ? new Date(notification.timestamp * 1000).toLocaleTimeString() : new Date().toLocaleTimeString();
+            const prefix = sessionId ? `[${sessionId}] ` : '';
+            logEntry.className = `log-entry text-warning`;
+            logEntry.innerHTML = `<small>${timestamp}</small> ${prefix}[GROUP LEAVE] ${notification.body}`;
+            logContainer.appendChild(logEntry);
+            logContainer.scrollTop = logContainer.scrollHeight;
+        }
+    });
+
+    sse.addEventListener('group_update', (e) => {
+        const payload = JSON.parse(e.data);
+        const { sessionId, notification } = payload;
+
+        console.log('SSE event: group_update -', notification.body, 'in session', sessionId);
+
+        // Add group update log
+        if (logContainer) {
+            const logEntry = document.createElement('div');
+            const timestamp = notification.timestamp ? new Date(notification.timestamp * 1000).toLocaleTimeString() : new Date().toLocaleTimeString();
+            const prefix = sessionId ? `[${sessionId}] ` : '';
+            logEntry.className = `log-entry text-info`;
+            logEntry.innerHTML = `<small>${timestamp}</small> ${prefix}[GROUP UPDATE] ${notification.body}`;
+            logContainer.appendChild(logEntry);
+            logContainer.scrollTop = logContainer.scrollHeight;
+        }
+    });
+
+    // Contact and chat events
+    sse.addEventListener('contact_changed', (e) => {
+        const payload = JSON.parse(e.data);
+        const { sessionId, oldId, newId } = payload;
+
+        console.log('SSE event: contact_changed -', oldId, 'to', newId, 'in session', sessionId);
+
+        // Add contact change log
+        if (logContainer) {
+            const logEntry = document.createElement('div');
+            const timestamp = new Date().toLocaleTimeString();
+            const prefix = sessionId ? `[${sessionId}] ` : '';
+            logEntry.className = `log-entry text-info`;
+            logEntry.innerHTML = `<small>${timestamp}</small> ${prefix}[CONTACT CHANGED] Contact changed from ${oldId} to ${newId}`;
+            logContainer.appendChild(logEntry);
+            logContainer.scrollTop = logContainer.scrollHeight;
+        }
+    });
+
+    sse.addEventListener('group_admin_changed', (e) => {
+        const payload = JSON.parse(e.data);
+        const { sessionId, notification } = payload;
+
+        console.log('SSE event: group_admin_changed -', notification.body, 'in session', sessionId);
+
+        // Add group admin change log
+        if (logContainer) {
+            const logEntry = document.createElement('div');
+            const timestamp = notification.timestamp ? new Date(notification.timestamp * 1000).toLocaleTimeString() : new Date().toLocaleTimeString();
+            const prefix = sessionId ? `[${sessionId}] ` : '';
+            logEntry.className = `log-entry text-info`;
+            logEntry.innerHTML = `<small>${timestamp}</small> ${prefix}[GROUP ADMIN CHANGED] ${notification.body}`;
+            logContainer.appendChild(logEntry);
+            logContainer.scrollTop = logContainer.scrollHeight;
+        }
+    });
+
+    let reconnectTimeout = null;
+
     sse.onerror = (err) => {
         console.error('SSE Connection Error:', err);
         updateWhatsappStatus('STREAM ERROR', 'danger');
         manageUIState('disconnected');
-        sse.close();
+
+        // Attempt to reconnect after a delay
+        if (reconnectTimeout) {
+            clearTimeout(reconnectTimeout);
+        }
+
+        reconnectTimeout = setTimeout(() => {
+            console.log('Attempting to reconnect to SSE stream...');
+            sse.close();
+
+            // Create a new EventSource with a delay to prevent rapid reconnection attempts
+            setTimeout(() => {
+                const newSSE = new EventSource('/qr-stream');
+
+                newSSE.addEventListener('status', (e) => {
+                    const payload = JSON.parse(e.data);
+                    const { sessionId, message, details } = payload;
+                    console.log('SSE event: status -', message, 'for session', sessionId, details ? 'details: ' + details : '');
+
+                    // Update the state for this session
+                    if (!sessionStates[sessionId]) {
+                        sessionStates[sessionId] = { status: 'disconnected', qr: null };
+
+                        // Add to dropdown if not already there
+                        let sessionExists = false;
+                        for (let i = 0; i < sessionSelect.options.length; i++) {
+                            if (sessionSelect.options[i].value === sessionId) {
+                                sessionExists = true;
+                                break;
+                            }
+                        }
+
+                        if (!sessionExists) {
+                            const option = document.createElement('option');
+                            option.value = sessionId;
+                            option.textContent = sessionId;
+                            sessionSelect.appendChild(option);
+                        }
+                    }
+
+                    let status = message.toLowerCase().includes('stop') ? 'disconnected' :
+                                 message.toLowerCase().includes('auth_failure') ? 'auth_failure' : message;
+
+                    sessionStates[sessionId].status = status;
+
+                    // Update the multisession status UI
+                    updateSessionStatusUI(sessionId, status);
+
+                    // If this is the currently selected session, update the main UI
+                    if (sessionSelect.value === sessionId) {
+                        manageUIState(sessionStates[sessionId].status);
+
+                        // Update what's displayed based on the new status if user hasn't actively switched views
+                        const currentStatus = sessionStates[sessionId].status.toLowerCase();
+
+                        // Only update display if not currently viewing chat history
+                        if (chatHistoryContainer.classList.contains('d-none')) {
+                            qrContainer.classList.add('d-none');
+                            whatsappReadyContainer.classList.add('d-none');
+                            whatsappStoppedContainer.classList.add('d-none');
+
+                            if (currentStatus === 'qr') {
+                                qrContainer.classList.remove('d-none');
+                            } else if (currentStatus === 'ready') {
+                                document.getElementById('ready-session-name').textContent = sessionId; // Set the session name
+                                // Don't automatically show ready panel - user can click to see chat history
+                                // BUT make sure the ready panel is properly prepared if user clicks
+                            } else if (currentStatus === 'disconnected' || currentStatus === 'stopped') {
+                                document.getElementById('stopped-session-name').textContent = sessionId; // Set the session name
+                                whatsappStoppedContainer.classList.remove('d-none');
+                            }
+                        }
+                    }
+                });
+
+                newSSE.addEventListener('qr', (e) => {
+                    console.log('SSE event: qr');
+                    const payload = JSON.parse(e.data);
+                    const { sessionId, dataUrl } = payload;
+
+                    // Store the QR code for this session
+                    if (!sessionStates[sessionId]) {
+                        sessionStates[sessionId] = { status: 'qr', qr: null };
+
+                        // Add to dropdown if not already there
+                        let sessionExists = false;
+                        for (let i = 0; i < sessionSelect.options.length; i++) {
+                            if (sessionSelect.options[i].value === sessionId) {
+                                sessionExists = true;
+                                break;
+                            }
+                        }
+
+                        if (!sessionExists) {
+                            const option = document.createElement('option');
+                            option.value = sessionId;
+                            option.textContent = sessionId;
+                            sessionSelect.appendChild(option);
+                        }
+                    }
+
+                    sessionStates[sessionId].qr = dataUrl;
+                    sessionStates[sessionId].status = 'qr';
+
+                    // Update the multisession status UI
+                    updateSessionStatusUI(sessionId, 'qr');
+
+                    // If this is the currently selected session, update the UI
+                    if (sessionSelect.value === sessionId) {
+                        qrImage.src = dataUrl;
+                        manageUIState('qr');
+                        updateWhatsappStatus('QR SCAN', 'warning');
+
+                        // Update what's displayed based on the new status if user hasn't actively switched views
+                        // Only update display if not currently viewing chat history
+                        if (chatHistoryContainer.classList.contains('d-none')) {
+                            qrContainer.classList.add('d-none');
+                            whatsappReadyContainer.classList.add('d-none');
+                            whatsappStoppedContainer.classList.add('d-none');
+
+                            // Show QR code panel
+                            qrContainer.classList.remove('d-none');
+                        }
+                    }
+                });
+
+                newSSE.addEventListener('ready', (e) => {
+                    console.log('SSE event: ready');
+                    const payload = JSON.parse(e.data);
+                    const { sessionId, message } = payload;
+
+                    // Update the state for this session
+                    if (!sessionStates[sessionId]) {
+                        sessionStates[sessionId] = { status: 'ready', qr: null };
+
+                        // Add to dropdown if not already there
+                        let sessionExists = false;
+                        for (let i = 0; i < sessionSelect.options.length; i++) {
+                            if (sessionSelect.options[i].value === sessionId) {
+                                sessionExists = true;
+                                break;
+                            }
+                        }
+
+                        if (!sessionExists) {
+                            const option = document.createElement('option');
+                            option.value = sessionId;
+                            option.textContent = sessionId;
+                            sessionSelect.appendChild(option);
+                        }
+                    }
+
+                    sessionStates[sessionId].status = 'ready';
+
+                    // Update the multisession status UI
+                    updateSessionStatusUI(sessionId, 'ready');
+
+                    // If this is the currently selected session, update the UI
+                    if (sessionSelect.value === sessionId) {
+                        manageUIState('ready');
+                        updateWhatsappStatus('READY', 'success');
+                        document.getElementById('ready-session-name').textContent = sessionId; // Set the session name
+                        console.log('--ready');
+
+                        // Update what's displayed based on the new status if user hasn't actively switched views
+                        // Only update display if not currently viewing chat history
+                        if (chatHistoryContainer.classList.contains('d-none')) {
+                            qrContainer.classList.add('d-none');
+                            whatsappReadyContainer.classList.add('d-none');
+                            whatsappStoppedContainer.classList.add('d-none');
+
+                            // Show ready panel when status becomes ready
+                            document.getElementById('ready-session-name').textContent = sessionId;
+                            whatsappReadyContainer.classList.remove('d-none');
+                        }
+                    }
+                });
+
+                newSSE.addEventListener('disconnected', (e) => {
+                    console.log('SSE event: disconnected');
+                    const payload = JSON.parse(e.data);
+                    const { sessionId, message } = payload;
+
+                    // Update the state for this session
+                    if (!sessionStates[sessionId]) {
+                        sessionStates[sessionId] = { status: 'disconnected', qr: null };
+
+                        // Add to dropdown if not already there
+                        let sessionExists = false;
+                        for (let i = 0; i < sessionSelect.options.length; i++) {
+                            if (sessionSelect.options[i].value === sessionId) {
+                                sessionExists = true;
+                                break;
+                            }
+                        }
+
+                        if (!sessionExists) {
+                            const option = document.createElement('option');
+                            option.value = sessionId;
+                            option.textContent = sessionId;
+                            sessionSelect.appendChild(option);
+                        }
+                    }
+
+                    sessionStates[sessionId].status = 'disconnected';
+
+                    // Update the multisession status UI
+                    updateSessionStatusUI(sessionId, 'disconnected');
+
+                    // If this is the currently selected session, update the UI
+                    if (sessionSelect.value === sessionId) {
+                        manageUIState('disconnected');
+                        updateWhatsappStatus('STOPPED', 'danger');
+
+                        // Update what's displayed based on the new status if user hasn't actively switched views
+                        // Only update display if not currently viewing chat history
+                        if (chatHistoryContainer.classList.contains('d-none')) {
+                            qrContainer.classList.add('d-none');
+                            whatsappReadyContainer.classList.add('d-none');
+                            whatsappStoppedContainer.classList.add('d-none');
+
+                            // Show stopped panel and update session name
+                            document.getElementById('stopped-session-name').textContent = sessionId;
+                            whatsappStoppedContainer.classList.remove('d-none');
+                        }
+                    }
+                });
+
+                newSSE.onerror = (err) => {
+                    console.error('SSE Connection Error (reconnection attempt):', err);
+                    updateWhatsappStatus('STREAM ERROR', 'danger');
+                    manageUIState('disconnected');
+                };
+
+                // Replace the old SSE reference with the new one
+                window.sse = newSSE;
+            }, 1000); // Wait 1 second before reconnecting
+        }, 3000); // Attempt reconnection after 3 seconds
     };
 
     // --- Chat History Functionality ---

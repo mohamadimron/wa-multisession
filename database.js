@@ -144,15 +144,26 @@ function deleteSessionHistory(sessionName) {
     });
 }
 
-// Function to get session history with pagination
-function getSessionHistory(limit = 10, offset = 0) {
+// Function to get session history with pagination and optional search
+function getSessionHistory(limit = 10, offset = 0, search = null) {
     if (!db) {
         throw new Error("Database not initialized. Call initDb first.");
     }
 
     return new Promise((resolve, reject) => {
-        const query = `SELECT * FROM sessions ORDER BY timestamp DESC LIMIT ? OFFSET ?`;
-        db.all(query, [limit, offset], (err, rows) => {
+        let query = `SELECT * FROM sessions`;
+        const params = [];
+
+        if (search && search.trim() !== '') {
+            query += ` WHERE session_name LIKE ? OR status LIKE ?`;
+            const searchTerm = `%${search.trim()}%`;
+            params.push(searchTerm, searchTerm);
+        }
+
+        query += ` ORDER BY timestamp DESC LIMIT ? OFFSET ?`;
+        params.push(limit, offset);
+
+        db.all(query, params, (err, rows) => {
             if (err) {
                 console.error('Error fetching session history:', err.message);
                 reject(err);
@@ -163,15 +174,23 @@ function getSessionHistory(limit = 10, offset = 0) {
     });
 }
 
-// Function to get total count of session history
-function getSessionHistoryCount() {
+// Function to get total count of session history with optional search
+function getSessionHistoryCount(search = null) {
     if (!db) {
         throw new Error("Database not initialized. Call initDb first.");
     }
 
     return new Promise((resolve, reject) => {
-        const query = `SELECT COUNT(*) as count FROM sessions`;
-        db.get(query, (err, row) => {
+        let query = `SELECT COUNT(*) as count FROM sessions`;
+        const params = [];
+
+        if (search && search.trim() !== '') {
+            query += ` WHERE session_name LIKE ? OR status LIKE ?`;
+            const searchTerm = `%${search.trim()}%`;
+            params.push(searchTerm, searchTerm);
+        }
+
+        db.get(query, params, (err, row) => {
             if (err) {
                 console.error('Error counting session history:', err.message);
                 reject(err);
@@ -182,15 +201,26 @@ function getSessionHistoryCount() {
     });
 }
 
-// Function to get system logs with pagination
-function getSystemLogs(limit = 10, offset = 0) {
+// Function to get system logs with pagination and optional search
+function getSystemLogs(limit = 10, offset = 0, search = null) {
     if (!db) {
         throw new Error("Database not initialized. Call initDb first.");
     }
 
     return new Promise((resolve, reject) => {
-        const query = `SELECT * FROM logs ORDER BY timestamp DESC LIMIT ? OFFSET ?`;
-        db.all(query, [limit, offset], (err, rows) => {
+        let query = `SELECT * FROM logs`;
+        const params = [];
+
+        if (search && search.trim() !== '') {
+            query += ` WHERE message LIKE ? OR type LIKE ? OR session_id LIKE ?`;
+            const searchTerm = `%${search.trim()}%`;
+            params.push(searchTerm, searchTerm, searchTerm);
+        }
+
+        query += ` ORDER BY timestamp DESC LIMIT ? OFFSET ?`;
+        params.push(limit, offset);
+
+        db.all(query, params, (err, rows) => {
             if (err) {
                 console.error('Error fetching system logs:', err.message);
                 reject(err);
@@ -201,15 +231,23 @@ function getSystemLogs(limit = 10, offset = 0) {
     });
 }
 
-// Function to get total count of system logs
-function getSystemLogsCount() {
+// Function to get total count of system logs with optional search
+function getSystemLogsCount(search = null) {
     if (!db) {
         throw new Error("Database not initialized. Call initDb first.");
     }
 
     return new Promise((resolve, reject) => {
-        const query = `SELECT COUNT(*) as count FROM logs`;
-        db.get(query, (err, row) => {
+        let query = `SELECT COUNT(*) as count FROM logs`;
+        const params = [];
+
+        if (search && search.trim() !== '') {
+            query += ` WHERE message LIKE ? OR type LIKE ? OR session_id LIKE ?`;
+            const searchTerm = `%${search.trim()}%`;
+            params.push(searchTerm, searchTerm, searchTerm);
+        }
+
+        db.get(query, params, (err, row) => {
             if (err) {
                 console.error('Error counting system logs:', err.message);
                 reject(err);

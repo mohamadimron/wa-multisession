@@ -81,6 +81,99 @@ async function main() {
         insertSessionStatus(sessionId, 'disconnected').catch(err => logger.error(`Failed to insert disconnected status for session ${sessionId}:`, err));
     });
 
+    // Add comprehensive WhatsApp event listeners
+    whatsappClient.on('message', (data) => {
+        const { sessionId, message } = data;
+        sendSseEvent('message', { sessionId, message });
+
+        // Log message to system logs
+        const logType = message.fromMe ? 'info' : 'message';
+        const logMessage = `${message.fromMe ? 'Sent' : 'Received'} - ${message.body || `[${message.type} message]`}`;
+        logger.log(logType, logMessage, sessionId);
+    });
+
+    whatsappClient.on('message_create', (data) => {
+        const { sessionId, message } = data;
+        sendSseEvent('message_create', { sessionId, message });
+
+        // Log message creation
+        logger.log('info', `Message created - ${message.body || `[${message.type} message]`}`, sessionId);
+    });
+
+    whatsappClient.on('message_ack', (data) => {
+        const { sessionId, messageId, status, timestamp } = data;
+        sendSseEvent('message_ack', { sessionId, messageId, status, timestamp });
+
+        // Log message acknowledgment
+        logger.log('info', `Message ack: ${status}`, sessionId);
+    });
+
+    whatsappClient.on('message_revoke_everyone', (data) => {
+        const { sessionId, message, revokedMessage } = data;
+        sendSseEvent('message_revoke_everyone', { sessionId, message, revokedMessage });
+
+        // Log message revocation
+        logger.log('info', `Message revoked by everyone`, sessionId);
+    });
+
+    whatsappClient.on('message_revoke_me', (data) => {
+        const { sessionId, message } = data;
+        sendSseEvent('message_revoke_me', { sessionId, message });
+
+        // Log message revocation by me
+        logger.log('info', `Message revoked by me`, sessionId);
+    });
+
+    whatsappClient.on('media_uploaded', (data) => {
+        const { sessionId, messageId } = data;
+        sendSseEvent('media_uploaded', { sessionId, messageId });
+
+        // Log media upload
+        logger.log('info', `Media uploaded - ID: ${messageId}`, sessionId);
+    });
+
+    // Group events
+    whatsappClient.on('group_join', (data) => {
+        const { sessionId, notification } = data;
+        sendSseEvent('group_join', { sessionId, notification });
+
+        // Log group join
+        logger.log('info', `Contact joined group: ${notification.body}`, sessionId);
+    });
+
+    whatsappClient.on('group_leave', (data) => {
+        const { sessionId, notification } = data;
+        sendSseEvent('group_leave', { sessionId, notification });
+
+        // Log group leave
+        logger.log('info', `Contact left group: ${notification.body}`, sessionId);
+    });
+
+    whatsappClient.on('group_update', (data) => {
+        const { sessionId, notification } = data;
+        sendSseEvent('group_update', { sessionId, notification });
+
+        // Log group update
+        logger.log('info', `Group updated: ${notification.body}`, sessionId);
+    });
+
+    // Contact and chat events
+    whatsappClient.on('contact_changed', (data) => {
+        const { sessionId, oldId, newId, isContact } = data;
+        sendSseEvent('contact_changed', { sessionId, oldId, newId, isContact });
+
+        // Log contact change
+        logger.log('info', `Contact changed: ${oldId} to ${newId}`, sessionId);
+    });
+
+    whatsappClient.on('group_admin_changed', (data) => {
+        const { sessionId, notification } = data;
+        sendSseEvent('group_admin_changed', { sessionId, notification });
+
+        // Log group admin change
+        logger.log('info', `Group admin changed: ${notification.body}`, sessionId);
+    });
+
     // Function to load existing sessions from the data directory
     async function loadExistingSessions() {
         const fs = require('fs');
@@ -290,9 +383,9 @@ async function main() {
     // API endpoint to get session history from database with pagination
     app.get('/api/sessions/history', async (req, res) => {
         try {
-            const { limit = 10, offset = 0 } = req.query;
-            const sessions = await getSessionHistory(parseInt(limit), parseInt(offset));
-            const totalCount = await getSessionHistoryCount();
+            const { limit = 10, offset = 0, search } = req.query;
+            const sessions = await getSessionHistory(parseInt(limit), parseInt(offset), search || null);
+            const totalCount = await getSessionHistoryCount(search || null);
 
             res.json({
                 status: 'success',
@@ -354,9 +447,9 @@ async function main() {
     // API endpoint to get system logs from database
     app.get('/api/system/logs', async (req, res) => {
         try {
-            const { limit = 10, offset = 0 } = req.query;
-            const logs = await getSystemLogs(parseInt(limit), parseInt(offset));
-            const totalCount = await getSystemLogsCount();
+            const { limit = 10, offset = 0, search } = req.query;
+            const logs = await getSystemLogs(parseInt(limit), parseInt(offset), search || null);
+            const totalCount = await getSystemLogsCount(search || null);
 
             res.json({
                 status: 'success',
@@ -431,6 +524,31 @@ async function main() {
             logger.error(`API send error for session ${sessionId}: ${error.message}`);
             res.status(500).json({ status: 'error', message: error.message });
         }
+    });
+
+    // SSE endpoint for QR codes and status updates
+    app.get('/qr-stream', (req, res) => {
+        // Set headers for SSE
+        res.setHeader('Cache-Control', 'no-cache');
+        res.setHeader('Content-Type', 'text/event-stream');
+        res.setHeader('Access-Control-Allow-Origin', '*');
+        res.setHeader('Connection', 'keep-alive');
+
+        // Send a welcome message to confirm connection
+        res.write(`data: {"event":"connected","message":"SSE connection established"}\n\n`);
+
+        // Add the response object to the set of SSE clients
+        sseClients.add(res);
+
+        // Remove client when connection closes
+        req.on('close', () => {
+            sseClients.delete(res);
+        });
+
+        req.on('error', (err) => {
+            logger.error(`SSE error for client: ${err.message}`);
+            sseClients.delete(res);
+        });
     });
 
     // Static file serving (MUST be after all API routes)
