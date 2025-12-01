@@ -464,3 +464,13 @@ body {
         border-radius: 6px;
     }
   
+#session-select-send {
+    color: #e5e5e5 !important;
+    background-color: #1e1e1e !important;
+    border-color: #444 !important;
+}
+
+#session-select-send option {
+    color: #fff !important;
+    background-color: #1e1e1e !important;
+}

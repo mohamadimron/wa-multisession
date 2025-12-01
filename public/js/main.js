@@ -18,6 +18,7 @@ document.addEventListener('DOMContentLoaded', () => {
     const btnStop = document.getElementById('btn-stop-whatsapp');
     const systemStatusBadge = document.getElementById('status-badge');
     const sessionStatusesContainer = document.getElementById('session-statuses');
+    const sendSessionSelect = document.getElementById('session-select-send'); // Ready sessions dropdown for sending messages
 
     // Track all sessions and their states
     // Start with no default session to avoid showing it if no folder exists
@@ -335,6 +336,9 @@ document.addEventListener('DOMContentLoaded', () => {
                     // Update multisession status UI
                     updateSessionStatusUI(newSessionId.trim(), 'disconnected');
 
+                    // Update the ready sessions dropdown to reflect current session status
+                    updateReadySessionsDropdown();
+
                     // Select the new session
                     sessionSelect.value = newSessionId.trim();
 
@@ -427,6 +431,9 @@ document.addEventListener('DOMContentLoaded', () => {
 
     // Load existing sessions from server when page loads
     loadExistingSessions();
+
+    // Initialize the ready sessions dropdown after page loads
+    updateReadySessionsDropdown();
 
     // Handle session selection change
     sessionSelect.addEventListener('change', () => {
@@ -530,6 +537,9 @@ document.addEventListener('DOMContentLoaded', () => {
                         // Add to multisession status UI
                         const status = session.isReady ? 'ready' : 'disconnected';
                         updateSessionStatusUI(session.sessionId, status);
+
+                        // Update the ready sessions dropdown to reflect current session status
+                        updateReadySessionsDropdown();
                     }
                 });
             }
@@ -617,6 +627,9 @@ document.addEventListener('DOMContentLoaded', () => {
         // Update the multisession status UI
         updateSessionStatusUI(sessionId, status);
 
+        // Update the ready sessions dropdown to reflect current session status
+        updateReadySessionsDropdown();
+
         // If this is the currently selected session, update the main UI
         if (sessionSelect.value === sessionId) {
             manageUIState(sessionStates[sessionId].status);
@@ -675,6 +688,9 @@ document.addEventListener('DOMContentLoaded', () => {
         // Update the multisession status UI
         updateSessionStatusUI(sessionId, 'qr');
 
+        // Update the ready sessions dropdown to reflect current session status
+        updateReadySessionsDropdown();
+
         // If this is the currently selected session, update the UI
         if (sessionSelect.value === sessionId) {
             qrImage.src = dataUrl;
@@ -724,6 +740,9 @@ document.addEventListener('DOMContentLoaded', () => {
 
         // Update the multisession status UI
         updateSessionStatusUI(sessionId, 'ready');
+
+        // Update the ready sessions dropdown to reflect current session status
+        updateReadySessionsDropdown();
 
         // If this is the currently selected session, update the UI
         if (sessionSelect.value === sessionId) {
@@ -775,6 +794,9 @@ document.addEventListener('DOMContentLoaded', () => {
 
         // Update the multisession status UI
         updateSessionStatusUI(sessionId, 'disconnected');
+
+        // Update the ready sessions dropdown to reflect current session status
+        updateReadySessionsDropdown();
 
         // If this is the currently selected session, update the UI
         if (sessionSelect.value === sessionId) {
@@ -1051,6 +1073,9 @@ document.addEventListener('DOMContentLoaded', () => {
                     // Update the multisession status UI
                     updateSessionStatusUI(sessionId, status);
 
+                    // Update the ready sessions dropdown to reflect current session status
+                    updateReadySessionsDropdown();
+
                     // If this is the currently selected session, update the main UI
                     if (sessionSelect.value === sessionId) {
                         manageUIState(sessionStates[sessionId].status);
@@ -1110,6 +1135,9 @@ document.addEventListener('DOMContentLoaded', () => {
                     // Update the multisession status UI
                     updateSessionStatusUI(sessionId, 'qr');
 
+                    // Update the ready sessions dropdown to reflect current session status
+                    updateReadySessionsDropdown();
+
                     // If this is the currently selected session, update the UI
                     if (sessionSelect.value === sessionId) {
                         qrImage.src = dataUrl;
@@ -1159,6 +1187,9 @@ document.addEventListener('DOMContentLoaded', () => {
 
                     // Update the multisession status UI
                     updateSessionStatusUI(sessionId, 'ready');
+
+                    // Update the ready sessions dropdown to reflect current session status
+                    updateReadySessionsDropdown();
 
                     // If this is the currently selected session, update the UI
                     if (sessionSelect.value === sessionId) {
@@ -1211,6 +1242,9 @@ document.addEventListener('DOMContentLoaded', () => {
 
                     // Update the multisession status UI
                     updateSessionStatusUI(sessionId, 'disconnected');
+
+                    // Update the ready sessions dropdown to reflect current session status
+                    updateReadySessionsDropdown();
 
                     // If this is the currently selected session, update the UI
                     if (sessionSelect.value === sessionId) {
@@ -1422,17 +1456,40 @@ document.addEventListener('DOMContentLoaded', () => {
         });
     }
 
+    // Function to update the ready sessions dropdown with only ready sessions
+    // This function is called whenever session status changes to ensure the dropdown only shows ready sessions
+    function updateReadySessionsDropdown() {
+        // Check if the element exists before trying to use it
+        if (!sendSessionSelect) {
+            console.warn('sendSessionSelect element not found');
+            return;
+        }
+
+        // First, clear the dropdown but keep the default option
+        sendSessionSelect.innerHTML = '<option value="">-- Select a ready session --</option>';
+
+        // Iterate through all session states and add only ready sessions to the dropdown
+        for (const [sessionId, sessionData] of Object.entries(sessionStates)) {
+            if (sessionData.status.toLowerCase() === 'ready') {
+                const option = document.createElement('option');
+                option.value = sessionId;
+                option.textContent = sessionId;
+                sendSessionSelect.appendChild(option);
+            }
+        }
+    }
+
     // --- Send Message Form ---
-    if (sendMessageForm) {
+    if (sendMessageForm && sendSessionSelect) {
         sendMessageForm.addEventListener('submit', async (e) => {
             e.preventDefault(); // Prevent form refresh
 
             const phoneNumber = document.getElementById('phone-number').value;
             const message = document.getElementById('message').value;
-            const sessionId = sessionSelect.value; // Use the selected session
+            const sessionId = sendSessionSelect.value; // Use the ready session selected from the new dropdown
 
             if (!sessionId) {
-                alert('Please select a session first!');
+                alert('Please select a ready session first!');
                 return;
             }
 

@@ -204,10 +204,18 @@
             <div class="col-md-4 mb-2">
                 <div class="card bg-dark-subtle text-light shadow-sm h-95">
                     <div class="card-header">
-                        <h5 class="card-title mb-0"><i class="bi bi-send"></i> Send Message</h5>                       
+                        <h5 class="card-title mb-0"><i class="bi bi-send"></i> Send Message</h5>
                     </div>
                     <div class="card-body">
                         <form id="send-message-form">
+                            <div class="mb-3">
+                                <label for="session-select-send" class="form-label">Select Ready Session</label>
+                                <select class="form-select" id="session-select-send" required>
+                                    <option value="">-- Select a ready session --</option>
+                                    <!-- Ready sessions will be populated here -->
+                                </select>
+                                <div class="form-text">Only sessions that are ready will appear here</div>
+                            </div>
                             <div class="mb-3">
                                 <label for="phone-number" class="form-label">Phone Number</label>
                                 <input type="tel" class="form-control" id="phone-number" placeholder="6281234567890"
