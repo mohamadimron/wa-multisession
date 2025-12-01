@@ -24,6 +24,19 @@ document.addEventListener('DOMContentLoaded', () => {
     // Start with no default session to avoid showing it if no folder exists
     const sessionStates = {};
 
+    // --- Chat History Functionality ---
+    const chatHistoryContainer = document.getElementById('chat-history-container');
+    const chatHistoryContent = document.getElementById('chat-history-content');
+    const chatHistoryLoading = document.getElementById('chat-history-loading');
+    const loadChatHistoryBtn = document.getElementById('load-chat-history');
+    const backToReadyBtn = document.getElementById('back-to-ready');
+    const refreshChatHistoryBtn = document.getElementById('refresh-chat-history');
+    const chatSearch = document.getElementById('chat-search');
+
+    // --- Stopped Session Panel ---
+    const whatsappStoppedContainer = document.getElementById('whatsapp-stopped');
+    const startSessionBtn = document.getElementById('start-session-btn');
+
     // Function to create a session status item element
     function createSessionStatusItem(sessionId, status) {
         const item = document.createElement('div');
@@ -117,6 +130,10 @@ document.addEventListener('DOMContentLoaded', () => {
                     // For other states (connecting, authenticating, etc.), update status accordingly
                     updateWhatsappStatus(sessionStates[sessionId].status, getStatusColor(sessionStates[sessionId].status));
                 }
+
+                // Update button states based on the selected session's status without hiding panels
+                // We'll call a new function that only updates button visibility without hiding panels
+                updateButtonState(sessionStates[sessionId].status);
             }
         });
 
@@ -262,6 +279,9 @@ document.addEventListener('DOMContentLoaded', () => {
             updateSessionStatusUI(currentSession, 'starting'); // Update the session item in the list
         }
 
+        // Disable the start button during initialization process
+        btnStart.disabled = true;
+
         fetch('/api/whatsapp/start', {
             method: 'POST',
             headers: {
@@ -287,12 +307,20 @@ document.addEventListener('DOMContentLoaded', () => {
             updateSessionStatusUI(currentSession, 'stopping'); // Update the session item in the list
         }
 
+        // Disable stop button during stop process to prevent multiple clicks
+        btnStop.disabled = true;
+
         fetch('/api/whatsapp/stop', {
             method: 'POST',
             headers: {
                 'Content-Type': 'application/json'
             },
             body: JSON.stringify({ sessionId: currentSession })
+        }).finally(() => {
+            // Re-enable the stop button after a short delay to allow for status updates to propagate
+            setTimeout(() => {
+                btnStop.disabled = false;
+            }, 1000);
         });
     });
 
@@ -485,6 +513,12 @@ document.addEventListener('DOMContentLoaded', () => {
         } else {
             // If no session is selected, just update UI to default state
             manageUIState('disconnected');
+
+            // Ensure buttons are in proper state when no session is selected
+            btnStart.disabled = false;
+            btnStart.classList.remove('d-none');
+            btnStop.classList.add('d-none');
+
             qrContainer.classList.add('d-none');
         }
     });
@@ -555,8 +589,37 @@ document.addEventListener('DOMContentLoaded', () => {
         whatsappStatusBadge.className = `badge bg-${color} me-2`;
     }
 
+    // Function to update only button states without affecting panel visibility
+    function updateButtonState(state) {
+        // Reset button disabled states first
+        btnStart.disabled = false;
+        btnStop.disabled = false;
+
+        // Reset button visibility
+        btnStart.classList.remove('d-none');
+        btnStop.classList.add('d-none');
+
+        if (state === 'ready') {
+            btnStart.classList.add('d-none');
+            btnStop.classList.remove('d-none');
+        } else if (state === 'disconnected') {
+            btnStart.classList.remove('d-none');
+            btnStop.classList.add('d-none');
+        } else if (state === 'qr') {
+            btnStart.classList.add('d-none');
+            btnStop.classList.remove('d-none'); // Show stop button during QR scan
+        } else { // Connecting, authenticating, etc.
+            btnStart.classList.add('d-none'); // Hide start button during transitional states
+            btnStop.classList.remove('d-none'); // Show stop button during transitional states
+        }
+    }
+
     function manageUIState(state) {
         // Default state - hide all specific panels, let the click handlers decide what to show
+        // Reset button disabled states first
+        btnStart.disabled = false;
+        btnStop.disabled = false;
+
         btnStart.classList.remove('d-none');
         btnStop.classList.add('d-none');
         qrContainer.classList.add('d-none');
@@ -586,7 +649,8 @@ document.addEventListener('DOMContentLoaded', () => {
             // Don't automatically show qrContainer - let user click to see options
         } else { // Connecting, authenticating, etc.
             updateWhatsappStatus(state, 'info');
-            btnStop.classList.remove('d-none');
+            btnStart.classList.add('d-none'); // Hide start button during transitional states
+            btnStop.classList.remove('d-none'); // Show stop button during transitional states
         }
     }
 
@@ -622,6 +686,9 @@ document.addEventListener('DOMContentLoaded', () => {
         let status = message.toLowerCase().includes('stop') ? 'disconnected' :
                      message.toLowerCase().includes('auth_failure') ? 'auth_failure' : message;
 
+        // Store previous status to check for transitions
+        const previousStatus = sessionStates[sessionId]?.status || 'disconnected';
+
         sessionStates[sessionId].status = status;
 
         // Update the multisession status UI
@@ -653,6 +720,16 @@ document.addEventListener('DOMContentLoaded', () => {
                     whatsappStoppedContainer.classList.remove('d-none');
                 }
             }
+
+            // Handle button state transitions based on status changes - only if this is the currently selected session
+            if (sessionId === sessionSelect.value) {
+                if (previousStatus === 'starting') {
+                    btnStart.disabled = false; // Re-enable start button since we're no longer in "starting" state
+                }
+
+                // Update button state based on the new status without hiding panels
+                updateButtonState(sessionStates[sessionId].status);
+            }
         }
     });
 
@@ -682,6 +759,9 @@ document.addEventListener('DOMContentLoaded', () => {
             }
         }
 
+        // Store previous status to check for transitions
+        const previousStatus = sessionStates[sessionId]?.status || 'disconnected';
+
         sessionStates[sessionId].qr = dataUrl;
         sessionStates[sessionId].status = 'qr';
 
@@ -706,6 +786,16 @@ document.addEventListener('DOMContentLoaded', () => {
 
                 // Show QR code panel
                 qrContainer.classList.remove('d-none');
+            }
+
+            // When QR status is received, re-enable the start button and ensure stop button is visible - only if this is the currently selected session
+            if (sessionId === sessionSelect.value) {
+                if (previousStatus === 'starting') {
+                    btnStart.disabled = false; // Re-enable start button since we're no longer in "starting" state
+                }
+
+                // Update button state based on the new status without hiding panels
+                updateButtonState(sessionStates[sessionId].status);
             }
         }
     });
@@ -736,6 +826,9 @@ document.addEventListener('DOMContentLoaded', () => {
             }
         }
 
+        // Store previous status to check for transitions
+        const previousStatus = sessionStates[sessionId]?.status || 'disconnected';
+
         sessionStates[sessionId].status = 'ready';
 
         // Update the multisession status UI
@@ -760,6 +853,16 @@ document.addEventListener('DOMContentLoaded', () => {
                 // Show ready panel when status becomes ready
                 document.getElementById('ready-session-name').textContent = sessionId;
                 whatsappReadyContainer.classList.remove('d-none');
+            }
+
+            // When session becomes ready, re-enable the start button and show the stop button - only if this is the currently selected session
+            if (sessionId === sessionSelect.value) {
+                if (previousStatus === 'starting') {
+                    btnStart.disabled = false; // Re-enable start button since we're no longer in "starting" state
+                }
+
+                // Update button state based on the new status without hiding panels
+                updateButtonState(sessionStates[sessionId].status);
             }
         }
     });
@@ -790,6 +893,9 @@ document.addEventListener('DOMContentLoaded', () => {
             }
         }
 
+        // Store previous status to check for transitions
+        const previousStatus = sessionStates[sessionId]?.status || 'disconnected';
+
         sessionStates[sessionId].status = 'disconnected';
 
         // Update the multisession status UI
@@ -813,6 +919,13 @@ document.addEventListener('DOMContentLoaded', () => {
                 // Show stopped panel and update session name
                 document.getElementById('stopped-session-name').textContent = sessionId;
                 whatsappStoppedContainer.classList.remove('d-none');
+            }
+
+            // When session disconnects, re-enable the start button if it was previously disabled - only if this is the currently selected session
+            if (sessionId === sessionSelect.value) {
+                btnStart.disabled = false; // Always enable start button when disconnected
+                // Update button state based on the new status without hiding panels
+                updateButtonState(sessionStates[sessionId].status);
             }
         }
     });
@@ -1068,6 +1181,9 @@ document.addEventListener('DOMContentLoaded', () => {
                     let status = message.toLowerCase().includes('stop') ? 'disconnected' :
                                  message.toLowerCase().includes('auth_failure') ? 'auth_failure' : message;
 
+                    // Store previous status to check for transitions
+                    const previousStatus = sessionStates[sessionId]?.status || 'disconnected';
+
                     sessionStates[sessionId].status = status;
 
                     // Update the multisession status UI
@@ -1100,6 +1216,16 @@ document.addEventListener('DOMContentLoaded', () => {
                                 whatsappStoppedContainer.classList.remove('d-none');
                             }
                         }
+
+                        // Handle button state transitions based on status changes - only if this is the currently selected session
+                        if (sessionId === sessionSelect.value) {
+                            if (previousStatus === 'starting') {
+                                btnStart.disabled = false; // Re-enable start button since we're no longer in "starting" state
+                            }
+
+                            // Update button state based on the new status without hiding panels
+                            updateButtonState(sessionStates[sessionId].status);
+                        }
                     }
                 });
 
@@ -1129,6 +1255,9 @@ document.addEventListener('DOMContentLoaded', () => {
                         }
                     }
 
+                    // Store previous status to check for transitions
+                    const previousStatus = sessionStates[sessionId]?.status || 'disconnected';
+
                     sessionStates[sessionId].qr = dataUrl;
                     sessionStates[sessionId].status = 'qr';
 
@@ -1153,6 +1282,16 @@ document.addEventListener('DOMContentLoaded', () => {
 
                             // Show QR code panel
                             qrContainer.classList.remove('d-none');
+                        }
+
+                        // When QR status is received, re-enable the start button and ensure stop button is visible - only if this is the currently selected session
+                        if (sessionId === sessionSelect.value) {
+                            if (previousStatus === 'starting') {
+                                btnStart.disabled = false; // Re-enable start button since we're no longer in "starting" state
+                            }
+
+                            // Update button state based on the new status without hiding panels
+                            updateButtonState(sessionStates[sessionId].status);
                         }
                     }
                 });
@@ -1183,6 +1322,9 @@ document.addEventListener('DOMContentLoaded', () => {
                         }
                     }
 
+                    // Store previous status to check for transitions
+                    const previousStatus = sessionStates[sessionId]?.status || 'disconnected';
+
                     sessionStates[sessionId].status = 'ready';
 
                     // Update the multisession status UI
@@ -1208,6 +1350,16 @@ document.addEventListener('DOMContentLoaded', () => {
                             // Show ready panel when status becomes ready
                             document.getElementById('ready-session-name').textContent = sessionId;
                             whatsappReadyContainer.classList.remove('d-none');
+                        }
+
+                        // When session becomes ready, re-enable the start button and show the stop button - only if this is the currently selected session
+                        if (sessionId === sessionSelect.value) {
+                            if (previousStatus === 'starting') {
+                                btnStart.disabled = false; // Re-enable start button since we're no longer in "starting" state
+                            }
+
+                            // Update button state based on the new status without hiding panels
+                            updateButtonState(sessionStates[sessionId].status);
                         }
                     }
                 });
@@ -1238,6 +1390,9 @@ document.addEventListener('DOMContentLoaded', () => {
                         }
                     }
 
+                    // Store previous status to check for transitions
+                    const previousStatus = sessionStates[sessionId]?.status || 'disconnected';
+
                     sessionStates[sessionId].status = 'disconnected';
 
                     // Update the multisession status UI
@@ -1262,6 +1417,13 @@ document.addEventListener('DOMContentLoaded', () => {
                             document.getElementById('stopped-session-name').textContent = sessionId;
                             whatsappStoppedContainer.classList.remove('d-none');
                         }
+
+                        // When session disconnects, re-enable the start button if it was previously disabled - only if this is the currently selected session
+                        if (sessionId === sessionSelect.value) {
+                            btnStart.disabled = false; // Always enable start button when disconnected
+                            // Update button state based on the new status without hiding panels
+                            updateButtonState(sessionStates[sessionId].status);
+                        }
                     }
                 });
 
@@ -1276,19 +1438,6 @@ document.addEventListener('DOMContentLoaded', () => {
             }, 1000); // Wait 1 second before reconnecting
         }, 3000); // Attempt reconnection after 3 seconds
     };
-
-    // --- Chat History Functionality ---
-    const chatHistoryContainer = document.getElementById('chat-history-container');
-    const chatHistoryContent = document.getElementById('chat-history-content');
-    const chatHistoryLoading = document.getElementById('chat-history-loading');
-    const loadChatHistoryBtn = document.getElementById('load-chat-history');
-    const backToReadyBtn = document.getElementById('back-to-ready');
-    const refreshChatHistoryBtn = document.getElementById('refresh-chat-history');
-    const chatSearch = document.getElementById('chat-search');
-
-    // --- Stopped Session Panel ---
-    const whatsappStoppedContainer = document.getElementById('whatsapp-stopped');
-    const startSessionBtn = document.getElementById('start-session-btn');
 
     // Function to format timestamp to readable format
     function formatTimestamp(timestamp) {
@@ -1445,6 +1594,9 @@ document.addEventListener('DOMContentLoaded', () => {
             // Update button states to show that start is in progress
             btnStart.classList.add('d-none');
             btnStop.classList.remove('d-none');
+
+            // Disable the start button during initialization process
+            btnStart.disabled = true;
 
             fetch('/api/whatsapp/start', {
                 method: 'POST',
