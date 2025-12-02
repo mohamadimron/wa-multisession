@@ -2,9 +2,10 @@ const express = require('express');
 const http = require('http');
 const { Server } = require("socket.io");
 const path = require('path');
+const fs = require('fs');
 const qrcode = require('qrcode');
 const logger = require('./logger');
-const { initDb, getDb, insertSessionStatus, getSessionHistory, deleteAllSessionHistory, deleteSessionHistory, getSessionHistoryCount, getSystemLogs, getSystemLogsCount, deleteAllSystemLogs, deleteSystemLogsBySession } = require('./database');
+const { initDb, getDb, insertSessionStatus, updateSessionPhoneNumber, getAllSessions, getSessionHistory, deleteAllSessionHistory, deleteSessionHistory, getSessionHistoryCount, getSystemLogs, getSystemLogsCount, deleteAllSystemLogs, deleteSystemLogsBySession } = require('./database');
 const whatsappClient = require('./whatsapp'); // Now a multi-session manager
 
 const app = express();
@@ -46,9 +47,9 @@ async function main() {
     });
 
     whatsappClient.on('ready', (data) => {
-        const { sessionId } = data;
+        const { sessionId, phoneNumber } = data;
         delete qrCodeData[sessionId]; // Clear QR code for this session
-        sendSseEvent('ready', { sessionId, message: `WhatsApp client is ready for session ${sessionId}.` });
+        sendSseEvent('ready', { sessionId, phoneNumber, message: `WhatsApp client is ready for session ${sessionId}.` });
 
         // Log session status change to database
         insertSessionStatus(sessionId, 'ready').catch(err => logger.error(`Failed to insert ready status for session ${sessionId}:`, err));
@@ -270,43 +271,28 @@ async function main() {
         res.json({ status: 'success', message: `Session ${sessionId} stopped.`, sessionId });
     });
 
-    app.get('/api/whatsapp/sessions', (req, res) => {
-        // Get all sessions from the session manager
-        const allSessions = whatsappClient.getSessionInfo();
+    app.get('/api/whatsapp/sessions', async (req, res) => {
+        try {
+            const sessionsFromDb = await getAllSessions();
+            // Also get live status from the client manager
+            const liveSessions = whatsappClient.getSessionInfo();
 
-        // Also get all directories in the data folder
-        const fs = require('fs');
-        const path = require('path');
-        const dataDir = path.join(__dirname, 'data');
-        let dataFolders = [];
-
-        if (fs.existsSync(dataDir)) {
-            dataFolders = fs.readdirSync(dataDir).filter(file => {
-                return fs.statSync(path.join(dataDir, file)).isDirectory();
+            const sessions = sessionsFromDb.map(s => {
+                const liveInfo = liveSessions.find(ls => ls.sessionId === s.session_name);
+                return {
+                    sessionId: s.session_name,
+                    phoneNumber: s.phone_number,
+                    // Use live status if available, otherwise use DB status
+                    status: liveInfo ? (liveInfo.isReady ? 'ready' : s.status) : s.status,
+                    isReady: liveInfo ? liveInfo.isReady : s.status === 'ready'
+                };
             });
+
+            res.json({ status: 'success', sessions });
+        } catch (err) {
+            logger.error('Failed to get sessions from database:', err);
+            res.status(500).json({ status: 'error', message: 'Could not retrieve sessions.' });
         }
-
-        // Filter sessions to include only those that have corresponding data folders
-        // or those that are currently in the session manager
-        const sessions = allSessions.filter(session => {
-            // Always include sessions that are currently in the manager
-            // and also check if there's a physical folder for them
-            return dataFolders.includes(session.sessionId);
-        });
-
-        // Add any data folders that may not be in the session manager yet
-        dataFolders.forEach(folder => {
-            const exists = sessions.some(s => s.sessionId === folder);
-            if (!exists) {
-                sessions.push({
-                    sessionId: folder,
-                    isReady: false,
-                    clientExists: false
-                });
-            }
-        });
-
-        res.json({ status: 'success', sessions });
     });
 
     app.delete('/api/whatsapp/session/:sessionId', async (req, res) => {
@@ -315,11 +301,12 @@ async function main() {
 
         await whatsappClient.stop(sessionId);
 
-        // Log session deletion status to database
+        // Delete session from the database
         try {
-            await insertSessionStatus(sessionId, 'deleted');
+            await deleteSessionHistory(sessionId);
+            logger.info(`Session ${sessionId} deleted from database.`);
         } catch (err) {
-            logger.error(`Failed to insert deletion status for session ${sessionId}:`, err);
+            logger.error(`Failed to delete session ${sessionId} from database:`, err);
         }
 
         whatsappClient.removeSession(sessionId);
@@ -549,6 +536,23 @@ async function main() {
             logger.error(`SSE error for client: ${err.message}`);
             sseClients.delete(res);
         });
+    });
+
+    // API endpoint to get QR code image for a session
+    app.get('/api/whatsapp/session/:sessionId/qr', (req, res) => {
+        const { sessionId } = req.params;
+        const qrImagePath = path.join(__dirname, 'data', sessionId, `${sessionId}_qr.png`);
+
+        // Check if QR code image exists
+        if (fs.existsSync(qrImagePath)) {
+            res.sendFile(qrImagePath);
+        } else {
+            // Return 404 if QR code image doesn't exist
+            res.status(404).json({
+                status: 'error',
+                message: `QR code image not found for session ${sessionId}`
+            });
+        }
     });
 
     // Static file serving (MUST be after all API routes)

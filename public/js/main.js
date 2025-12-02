@@ -38,7 +38,7 @@ document.addEventListener('DOMContentLoaded', () => {
     const startSessionBtn = document.getElementById('start-session-btn');
 
     // Function to create a session status item element
-    function createSessionStatusItem(sessionId, status) {
+    function createSessionStatusItem(sessionId, status, phoneNumber = null) {
         const item = document.createElement('div');
         item.className = `session-status-item ${status.toLowerCase()}`;
         item.id = `session-status-${sessionId}`;
@@ -83,14 +83,24 @@ document.addEventListener('DOMContentLoaded', () => {
                 statusIcon = 'bi bi-dash-circle';
         }
 
+        const phoneText = phoneNumber ? `+${phoneNumber}` : 'Waiting for connection...';
+
         item.innerHTML = `
-            <div class="session-name">
-                <i class="bi bi-whatsapp"></i>
-                <span>${sessionId}</span>
+            <div class="d-flex w-100 justify-content-between">
+                <div class="session-name">
+                    <i class="bi bi-whatsapp"></i>
+                    <span>${sessionId}</span>
+                </div>
+                <div class="session-status ${statusColor}">
+                    <i class="bi ${statusIcon}"></i>
+                    <span>${statusText}</span>
+                </div>
             </div>
-            <div class="session-status ${statusColor}">
-                <i class="bi ${statusIcon}"></i>
-                <span>${statusText}</span>
+            <div class="mt-1 phone-number-container">
+                <small class="text-muted">
+                    <i class="bi bi-telephone"></i>
+                    <span class="phone-number">${phoneText}</span>
+                </small>
             </div>
         `;
 
@@ -121,6 +131,8 @@ document.addEventListener('DOMContentLoaded', () => {
                     // For QR sessions, show the QR code.
                     updateWhatsappStatus('QR SCAN', 'warning');
                     qrContainer.classList.remove('d-none');
+                    // Load the saved QR code image for this session
+                    loadSavedQrCode(sessionId);
                 } else if (status === 'disconnected' || status === 'stopped') {
                     // For disconnected/stopped sessions, show stopped panel and update session name
                     document.getElementById('stopped-session-name').textContent = sessionId;
@@ -141,7 +153,7 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     // Function to update session status in the UI
-    function updateSessionStatusUI(sessionId, status) {
+    function updateSessionStatusUI(sessionId, status, phoneNumber = null) {
         const existingItem = document.getElementById(`session-status-${sessionId}`);
 
         if (existingItem) {
@@ -194,9 +206,16 @@ document.addEventListener('DOMContentLoaded', () => {
 
             // Update the session name text
             existingItem.querySelector('.session-name span').textContent = sessionId;
+
+            // Update phone number if it exists
+            const phoneEl = existingItem.querySelector('.phone-number');
+            if (phoneEl && phoneNumber) {
+                phoneEl.textContent = `+${phoneNumber}`;
+            }
+
         } else {
             // Create new item
-            const newItem = createSessionStatusItem(sessionId, status);
+            const newItem = createSessionStatusItem(sessionId, status, phoneNumber);
             sessionStatusesContainer.appendChild(newItem);
         }
 
@@ -232,6 +251,31 @@ document.addEventListener('DOMContentLoaded', () => {
         if (item) {
             item.remove();
         }
+    }
+
+    // Function to load saved QR code image for a session
+    function loadSavedQrCode(sessionId) {
+        if (!sessionId) return;
+
+        // Construct the URL for the QR code image with cache-busting parameter
+        const timestamp = new Date().getTime();
+        const qrImageUrl = `/api/whatsapp/session/${sessionId}/qr?t=${timestamp}`;
+
+        // Create a new image to test if it exists
+        const testImage = new Image();
+        testImage.onload = function() {
+            // If image loads successfully, set it to the QR code display
+            qrImage.src = qrImageUrl;
+            console.log(`Loaded saved QR code image for session: ${sessionId}`);
+        };
+        testImage.onerror = function() {
+            // If image doesn't exist, clear the QR display
+            console.log(`No saved QR code image found for session: ${sessionId}`);
+            qrImage.src = ''; // Clear the image
+        };
+
+        // Set the source to test if image exists
+        testImage.src = qrImageUrl;
     }
 
     // --- Socket.IO for Logs ---
@@ -498,6 +542,8 @@ document.addEventListener('DOMContentLoaded', () => {
             const status = sessionStates[selectedSession].status.toLowerCase();
             if (status === 'qr') {
                 qrContainer.classList.remove('d-none');
+                // Load the saved QR code image for this session
+                loadSavedQrCode(selectedSession);
             } else if (status === 'ready') {
                 // Don't show the basic "WhatsApp is Connected" panel, let user click to see chat history
                 // Keep it hidden and they can click the "Load Chat History" button or session item
@@ -560,22 +606,39 @@ document.addEventListener('DOMContentLoaded', () => {
                             sessionSelect.appendChild(option);
                         }
 
+                        const phoneNumber = session.phoneNumber;
+                        const status = session.status || (session.isReady ? 'ready' : 'disconnected');
+
                         // Update session state
                         if (!sessionStates[session.sessionId]) {
                             sessionStates[session.sessionId] = {
-                                status: session.isReady ? 'ready' : 'disconnected',
-                                qr: null
+                                status: status,
+                                qr: null,
+                                phoneNumber: phoneNumber
                             };
                         }
 
                         // Add to multisession status UI
-                        const status = session.isReady ? 'ready' : 'disconnected';
-                        updateSessionStatusUI(session.sessionId, status);
+                        updateSessionStatusUI(session.sessionId, status, phoneNumber);
 
                         // Update the ready sessions dropdown to reflect current session status
                         updateReadySessionsDropdown();
                     }
                 });
+
+                // Update button states if a session is currently selected
+                if (sessionSelect.value && sessionStates[sessionSelect.value]) {
+                    updateButtonState(sessionStates[sessionSelect.value].status);
+
+                    // If the selected session is in QR status, load the saved QR code
+                    if (sessionStates[sessionSelect.value].status.toLowerCase() === 'qr') {
+                        // Show QR container and load saved QR code
+                        if (qrContainer) {
+                            qrContainer.classList.remove('d-none');
+                            loadSavedQrCode(sessionSelect.value);
+                        }
+                    }
+                }
             }
         } catch (error) {
             console.error('Error loading existing sessions:', error);
@@ -591,6 +654,8 @@ document.addEventListener('DOMContentLoaded', () => {
 
     // Function to update only button states without affecting panel visibility
     function updateButtonState(state) {
+        const status = state.toLowerCase();
+
         // Reset button disabled states first
         btnStart.disabled = false;
         btnStop.disabled = false;
@@ -599,22 +664,24 @@ document.addEventListener('DOMContentLoaded', () => {
         btnStart.classList.remove('d-none');
         btnStop.classList.add('d-none');
 
-        if (state === 'ready') {
+        if (status === 'ready') {
             btnStart.classList.add('d-none');
             btnStop.classList.remove('d-none');
-        } else if (state === 'disconnected') {
+        } else if (status === 'disconnected' || status === 'stopped' || status === 'loaded' || status === 'created') {
             btnStart.classList.remove('d-none');
             btnStop.classList.add('d-none');
-        } else if (state === 'qr') {
+        } else if (status === 'qr' || status === 'authenticating' || status === 'connecting' || status === 'starting' || status === 'auth_failure') {
             btnStart.classList.add('d-none');
-            btnStop.classList.remove('d-none'); // Show stop button during QR scan
-        } else { // Connecting, authenticating, etc.
+            btnStop.classList.remove('d-none'); // Show stop button during transitional states
+        } else { // For any other state, assume we can stop but not start
             btnStart.classList.add('d-none'); // Hide start button during transitional states
             btnStop.classList.remove('d-none'); // Show stop button during transitional states
         }
     }
 
     function manageUIState(state) {
+        const status = state.toLowerCase();
+
         // Default state - hide all specific panels, let the click handlers decide what to show
         // Reset button disabled states first
         btnStart.disabled = false;
@@ -627,7 +694,7 @@ document.addEventListener('DOMContentLoaded', () => {
         whatsappStoppedContainer.classList.add('d-none');
         chatHistoryContainer.classList.add('d-none');
 
-        if (state === 'ready') {
+        if (status === 'ready') {
             updateWhatsappStatus('READY', 'success');
             btnStart.classList.add('d-none');
             btnStop.classList.remove('d-none');
@@ -637,12 +704,12 @@ document.addEventListener('DOMContentLoaded', () => {
                 document.getElementById('ready-session-name').textContent = currentSession; // Set the session name
             }
             // Don't automatically show whatsappReadyContainer - let user click to see options
-        } else if (state === 'disconnected') {
+        } else if (status === 'disconnected' || status === 'stopped') {
             updateWhatsappStatus('STOPPED', 'danger');
             btnStart.classList.remove('d-none');
             btnStop.classList.add('d-none');
             // Don't automatically show whatsappStoppedContainer - let user click to see options
-        } else if (state === 'qr') {
+        } else if (status === 'qr') {
             updateWhatsappStatus('QR SCAN', 'warning');
             btnStart.classList.add('d-none');
             btnStop.classList.remove('d-none'); // Show stop button during QR scan
@@ -773,7 +840,6 @@ document.addEventListener('DOMContentLoaded', () => {
 
         // If this is the currently selected session, update the UI
         if (sessionSelect.value === sessionId) {
-            qrImage.src = dataUrl;
             manageUIState('qr');
             updateWhatsappStatus('QR SCAN', 'warning');
 
@@ -786,6 +852,8 @@ document.addEventListener('DOMContentLoaded', () => {
 
                 // Show QR code panel
                 qrContainer.classList.remove('d-none');
+                // Load the saved QR code image for this session
+                loadSavedQrCode(sessionId);
             }
 
             // When QR status is received, re-enable the start button and ensure stop button is visible - only if this is the currently selected session
@@ -803,7 +871,7 @@ document.addEventListener('DOMContentLoaded', () => {
     sse.addEventListener('ready', (e) => {
         console.log('SSE event: ready');
         const payload = JSON.parse(e.data);
-        const { sessionId, message } = payload;
+        const { sessionId, message, phoneNumber } = payload; // <-- phoneNumber added
 
         // Update the state for this session
         if (!sessionStates[sessionId]) {
@@ -833,6 +901,16 @@ document.addEventListener('DOMContentLoaded', () => {
 
         // Update the multisession status UI
         updateSessionStatusUI(sessionId, 'ready');
+
+        // ---- NEW LOGIC START ----
+        const sessionItem = document.getElementById(`session-status-${sessionId}`);
+        if (sessionItem) {
+            const phoneEl = sessionItem.querySelector('.phone-number');
+            if (phoneEl) {
+                phoneEl.textContent = phoneNumber ? `+${phoneNumber}` : 'N/A';
+            }
+        }
+        // ---- NEW LOGIC END ----
 
         // Update the ready sessions dropdown to reflect current session status
         updateReadySessionsDropdown();
@@ -1269,7 +1347,6 @@ document.addEventListener('DOMContentLoaded', () => {
 
                     // If this is the currently selected session, update the UI
                     if (sessionSelect.value === sessionId) {
-                        qrImage.src = dataUrl;
                         manageUIState('qr');
                         updateWhatsappStatus('QR SCAN', 'warning');
 
@@ -1282,6 +1359,8 @@ document.addEventListener('DOMContentLoaded', () => {
 
                             // Show QR code panel
                             qrContainer.classList.remove('d-none');
+                            // Load the saved QR code image for this session
+                            loadSavedQrCode(sessionId);
                         }
 
                         // When QR status is received, re-enable the start button and ensure stop button is visible - only if this is the currently selected session
@@ -1299,7 +1378,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 newSSE.addEventListener('ready', (e) => {
                     console.log('SSE event: ready');
                     const payload = JSON.parse(e.data);
-                    const { sessionId, message } = payload;
+                    const { sessionId, message, phoneNumber } = payload;
 
                     // Update the state for this session
                     if (!sessionStates[sessionId]) {
@@ -1329,6 +1408,15 @@ document.addEventListener('DOMContentLoaded', () => {
 
                     // Update the multisession status UI
                     updateSessionStatusUI(sessionId, 'ready');
+
+                    // Update phone number display
+                    const sessionItem = document.getElementById(`session-status-${sessionId}`);
+                    if (sessionItem) {
+                        const phoneEl = sessionItem.querySelector('.phone-number');
+                        if (phoneEl) {
+                            phoneEl.textContent = phoneNumber ? `+${phoneNumber}` : 'N/A';
+                        }
+                    }
 
                     // Update the ready sessions dropdown to reflect current session status
                     updateReadySessionsDropdown();
@@ -1625,7 +1713,14 @@ document.addEventListener('DOMContentLoaded', () => {
             if (sessionData.status.toLowerCase() === 'ready') {
                 const option = document.createElement('option');
                 option.value = sessionId;
-                option.textContent = sessionId;
+
+                // Include phone number if available
+                if (sessionData.phoneNumber) {
+                    option.textContent = `${sessionId} (+${sessionData.phoneNumber})`;
+                } else {
+                    option.textContent = sessionId;
+                }
+
                 sendSessionSelect.appendChild(option);
             }
         }

@@ -1,9 +1,11 @@
 const { Client, LocalAuth } = require('whatsapp-web.js');
 const qrcode_terminal = require('qrcode-terminal');
+const QRCode = require('qrcode');
 const logger = require('./logger');
 const { EventEmitter } = require('events');
 const fs = require('fs');
 const path = require('path');
+const { updateSessionPhoneNumber } = require('./database');
 
 class WhatsAppSession extends EventEmitter {
     constructor(sessionId) {
@@ -71,18 +73,44 @@ class WhatsAppSession extends EventEmitter {
     }
 
     attachListeners() {
-        this.client.on('qr', (qr) => {
+        this.client.on('qr', async (qr) => {
             this.isClientReady = false;
             console.log(`QR RECEIVED for session ${this.sessionId}. Printing to terminal...`);
             qrcode_terminal.generate(qr, { small: true });
+
+            // Save QR code as image file
+            try {
+                const qrImagePath = path.join(this.dataPath, `${this.sessionId}_qr.png`);
+                await QRCode.toFile(qrImagePath, qr, {
+                    width: 300,
+                    margin: 2,
+                    color: {
+                        dark: '#000000',
+                        light: '#ffffff'
+                    }
+                });
+                logger.info(`QR code saved to ${qrImagePath}`, this.sessionId);
+            } catch (error) {
+                logger.error(`Failed to save QR code image for session ${this.sessionId}: ${error.message}`, this.sessionId);
+            }
+
             this.emit('qr', { sessionId: this.sessionId, qr });
         });
 
-        this.client.on('ready', () => {
+        this.client.on('ready', async () => {
             this.isClientReady = true;
-            console.log(`WhatsApp client ready for session: ${this.sessionId}`);
-            logger.info('WhatsApp client is ready!', this.sessionId);
-            this.emit('ready', { sessionId: this.sessionId });
+            const phoneNumber = this.client.info.wid.user;
+            console.log(`WhatsApp client ready for session: ${this.sessionId} (${phoneNumber})`);
+            logger.info(`WhatsApp client is ready! Phone: ${phoneNumber}`, this.sessionId);
+            
+            // Save the phone number to the database
+            try {
+                await updateSessionPhoneNumber(this.sessionId, phoneNumber);
+            } catch (err) {
+                logger.error(`Failed to save phone number for session ${this.sessionId}:`, err);
+            }
+
+            this.emit('ready', { sessionId: this.sessionId, phoneNumber });
         });
 
         this.client.on('authenticated', () => {
@@ -412,6 +440,7 @@ class WhatsAppMultiSession extends EventEmitter {
 
     async sendMessage(sessionId, number, message) {
         const session = this.getSession(sessionId);
+        console.log('Sending message to session:', sessionId,  number);
         if (!session) {
             throw new Error(`Session ${sessionId} does not exist`);
         }
