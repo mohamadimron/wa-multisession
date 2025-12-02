@@ -368,72 +368,109 @@ document.addEventListener('DOMContentLoaded', () => {
         });
     });
 
+    // Add new session button to open modal
     addSessionBtn.addEventListener('click', () => {
-        const newSessionId = prompt('Enter new session name:');
-        if (newSessionId && newSessionId.trim() !== '') {
-            // Check if session already exists
-            let sessionExists = false;
-            for (let i = 0; i < sessionSelect.options.length; i++) {
-                if (sessionSelect.options[i].value === newSessionId.trim()) {
-                    sessionExists = true;
-                    break;
-                }
-            }
-
-            if (sessionExists) {
-                alert(`Session "${newSessionId}" already exists!`);
-                return;
-            }
-
-            // Create new session via API
-            fetch('/api/whatsapp/create-session', {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json'
-                },
-                body: JSON.stringify({ sessionId: newSessionId.trim() })
-            })
-            .then(response => response.json())
-            .then(data => {
-                if (data.status === 'success') {
-                    // Add to dropdown
-                    const option = document.createElement('option');
-                    option.value = newSessionId.trim();
-                    option.textContent = newSessionId.trim();
-                    sessionSelect.appendChild(option);
-
-                    // Initialize state for this new session
-                    sessionStates[newSessionId.trim()] = { status: 'disconnected', qr: null };
-
-                    // Update multisession status UI
-                    updateSessionStatusUI(newSessionId.trim(), 'disconnected');
-
-                    // Update the ready sessions dropdown to reflect current session status
-                    updateReadySessionsDropdown();
-
-                    // Select the new session
-                    sessionSelect.value = newSessionId.trim();
-
-                    // Update UI based on the new session selection
-                    manageUIState(sessionStates[newSessionId.trim()].status);
-                    updateWhatsappStatus(`Session ${newSessionId.trim()} created`, 'info');
-                } else {
-                    alert(`Error creating session: ${data.message}`);
-                }
-            })
-            .catch(error => {
-                console.error('Error creating session:', error);
-                alert(`Error creating session: ${error.message}`);
-            });
-        }
+        // Clear any previous error message
+        document.getElementById('session-name-error').style.display = 'none';
+        document.getElementById('session-name-error').textContent = '';
+        // Clear the input field
+        document.getElementById('new-session-name').value = '';
+        // Show the add session modal
+        addSessionModal.show();
     });
 
     // Modal elements
+    const addSessionModal = new bootstrap.Modal(document.getElementById('addSessionModal'));
     const deleteConfirmationModal = new bootstrap.Modal(document.getElementById('deleteConfirmationModal'));
     const sessionToDeleteElement = document.getElementById('sessionToDelete');
     const confirmDeleteBtn = document.getElementById('confirmDeleteBtn');
+    const newSessionNameInput = document.getElementById('new-session-name');
+    const confirmAddSessionBtn = document.getElementById('confirmAddSessionBtn');
 
     let sessionToDelete = null; // Variable to store the session to delete
+
+    // Handle the add session confirmation button click
+    confirmAddSessionBtn.addEventListener('click', () => {
+        const newSessionId = newSessionNameInput.value.trim();
+
+        // Validate session name
+        if (!newSessionId) {
+            document.getElementById('session-name-error').textContent = 'Session name is required.';
+            document.getElementById('session-name-error').style.display = 'block';
+            return;
+        }
+
+        // Check if session name is valid (alphanumeric, hyphens, underscores only)
+        if (!/^[a-zA-Z0-9_-]+$/.test(newSessionId)) {
+            document.getElementById('session-name-error').textContent = 'Session name can only contain letters, numbers, hyphens, and underscores.';
+            document.getElementById('session-name-error').style.display = 'block';
+            return;
+        }
+
+        // Check if session already exists
+        let sessionExists = false;
+        for (let i = 0; i < sessionSelect.options.length; i++) {
+            if (sessionSelect.options[i].value === newSessionId) {
+                sessionExists = true;
+                break;
+            }
+        }
+
+        if (sessionExists) {
+            document.getElementById('session-name-error').textContent = `Session "${newSessionId}" already exists!`;
+            document.getElementById('session-name-error').style.display = 'block';
+            return;
+        }
+
+        // Create new session via API
+        fetch('/api/whatsapp/create-session', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify({ sessionId: newSessionId })
+        })
+        .then(response => response.json())
+        .then(data => {
+            if (data.status === 'success') {
+                // Hide modal
+                addSessionModal.hide();
+
+                // Add to dropdown
+                const option = document.createElement('option');
+                option.value = newSessionId;
+                option.textContent = newSessionId;
+                sessionSelect.appendChild(option);
+
+                // Initialize state for this new session
+                sessionStates[newSessionId] = { status: 'disconnected', qr: null };
+
+                // Update multisession status UI
+                updateSessionStatusUI(newSessionId, 'disconnected');
+
+                // Update the ready sessions dropdown to reflect current session status
+                updateReadySessionsDropdown();
+
+                // Select the new session
+                sessionSelect.value = newSessionId;
+
+                // Update UI based on the new session selection
+                manageUIState(sessionStates[newSessionId].status);
+                updateWhatsappStatus(`Session ${newSessionId} created`, 'info');
+
+                // Clear the input field
+                newSessionNameInput.value = '';
+            } else {
+                document.getElementById('session-name-error').textContent = `Error creating session: ${data.message}`;
+                document.getElementById('session-name-error').style.display = 'block';
+            }
+        })
+        .catch(error => {
+            console.error('Error creating session:', error);
+            document.getElementById('session-name-error').textContent = `Error creating session: ${error.message}`;
+            document.getElementById('session-name-error').style.display = 'block';
+        });
+    });
 
     deleteSessionBtn.addEventListener('click', () => {
         const currentSession = sessionSelect.value;
@@ -1716,7 +1753,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
                 // Include phone number if available
                 if (sessionData.phoneNumber) {
-                    option.textContent = `${sessionId} (+${sessionData.phoneNumber})`;
+                    option.textContent = `${sessionId} (${sessionData.phoneNumber})`;
                 } else {
                     option.textContent = sessionId;
                 }
