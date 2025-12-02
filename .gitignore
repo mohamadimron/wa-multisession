@@ -2,6 +2,6 @@
 /node_modules
 
 # Data
-data/*
-!data/*.sqlite
-
+# data/*
+# !data/*.sqlite
+/data
